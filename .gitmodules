@@ -1,0 +1,3 @@
+[submodule "src/gdl"]
+	path = src/gdl
+	url = https://github.com/zeromotivat1on/gdl

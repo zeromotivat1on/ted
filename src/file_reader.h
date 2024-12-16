@@ -1,6 +1,5 @@
 #pragma once
 
-// TODO: switch u32 pos to u8* current (ptr to first unread byte)
 struct File_Reader
 {
     file_handle file;

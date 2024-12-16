@@ -3,7 +3,7 @@
 #include "file_reader.h"
 
 void load_font(Arena* arena, const char* path)
-{
+{    
     file_handle font = open_file(path, FILE_OPEN_EXISTING, FILE_ACCESS_READ);
     
     File_Reader fr;
@@ -30,11 +30,11 @@ void on_window_char(Window* win, u32 character)
 
 int main()
 {
-    #if 1
+#if 1
     const char* font_path = "C:/Users/admin/Downloads/Envy_Code_R_PR7/Envy_Code_R.ttf";
-    #else
+#else
     const char* font_path = "C:/Users/admin/Downloads/consola.ttf";
-    #endif
+#endif
     
     constexpr u64 k_arena_size = MB(32);
     Arena global_arena = create_arena(malloc(k_arena_size), k_arena_size);
@@ -57,7 +57,7 @@ int main()
     set_window_char_callback(&win, on_window_char);
     show_window(&win);
 
-    while(is_window_active(&win))
+    while (is_window_active(&win))
     {
         update_window(&win);
     }

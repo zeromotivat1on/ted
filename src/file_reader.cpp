@@ -7,7 +7,7 @@ void File_Reader::init(Arena* arena, file_handle handle)
     ASSERT(handle && handle != INVALID_FILE_HANDLE);
     
     file = handle;
-    size = file_size(file);
+    size = (u32)file_size(file);
     buffer = (u8*)arena->push(size);
     current = buffer;
     
@@ -51,6 +51,16 @@ s32 File_Reader::eat_s32()
 u32 File_Reader::eat_u32()
 {
     return *(u32*)eat(sizeof(u32));
+}
+
+s64 File_Reader::eat_s64()
+{
+    return *(s64*)eat(sizeof(s64));
+}
+
+u64 File_Reader::eat_u64()
+{
+    return *(u64*)eat(sizeof(u64));
 }
 
 void File_Reader::eat_str(char* str, u32 len)

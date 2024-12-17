@@ -4,7 +4,7 @@
 #include <malloc.h>
 
 // True type font format is stored in big endian byte order,
-// so here are some file reader wrapper specifically for font.
+// so here are some file reader wrappers specifically for font.
 
 static s16 font_eat_s16(File_Reader* fr)
 {
@@ -54,6 +54,30 @@ static u32 font_eat_u32(File_Reader* fr)
     return val;
 }
 
+static u64 font_eat_u64(File_Reader* fr)
+{
+    u64 val = fr->eat_u64();
+
+    if (platform_little_endian())
+    {
+        val = swap_endianness_64(&val);
+    }
+    
+    return val;
+}
+
+static s64 font_eat_s64(File_Reader* fr)
+{
+    s64 val = fr->eat_s64();
+
+    if (platform_little_endian())
+    {
+        val = swap_endianness_64(&val);
+    }
+    
+    return val;
+}
+
 void Offset_Subtable::read(File_Reader* fr)
 {
     scaler_type = font_eat_u32(fr);
@@ -69,6 +93,27 @@ void Table_Directory::read(File_Reader* fr)
     checksum = font_eat_u32(fr);
     offset = font_eat_u32(fr);
     length = font_eat_u32(fr);
+}
+
+void Head::read(File_Reader* fr)
+{
+    version = font_eat_s32(fr);
+    font_revision = font_eat_s32(fr);
+    checksum_adjustment = font_eat_u32(fr);
+    magic_number = font_eat_u32(fr);
+    flags = font_eat_u16(fr);
+    units_per_em = font_eat_u16(fr);
+    created = font_eat_s64(fr);
+    modified = font_eat_s64(fr);
+    x_min = font_eat_s16(fr);
+    y_min = font_eat_s16(fr);
+    x_max = font_eat_s16(fr);
+    y_max = font_eat_s16(fr);
+    mac_style = font_eat_u16(fr);
+    lowest_rec_ppem = font_eat_u16(fr);
+    font_direction_hint = font_eat_s16(fr);
+    index_to_loc_format = font_eat_s16(fr);
+    glyph_data_format = font_eat_s16(fr);
 }
 
 void Cmap_Encoding_Subtable::read(File_Reader* fr)
@@ -266,6 +311,8 @@ void Glyph_Outline::print() const
 
 void Font_Directory::read(Arena* arena, File_Reader* fr)
 {
+    File_Reader fr_temp = *fr;
+    
     offset_subtable.read(fr);
 
     const u16 num_tables = offset_subtable.num_tables;
@@ -280,11 +327,16 @@ void Font_Directory::read(Arena* arena, File_Reader* fr)
         {
             case GLYF_TAG: glyf_start = fr->buffer + t->offset; break;
             case LOCA_TAG: loca_start = fr->buffer + t->offset; break;
-            case HEAD_TAG: head_start = fr->buffer + t->offset; break;
+            case HEAD_TAG:
+            {
+                fr_temp.current = fr_temp.buffer + t->offset;
+                head = (Head*)arena->push(sizeof(Head));
+                head->read(&fr_temp);
+
+                break;
+            }
             case CMAP_TAG:
             {
-                File_Reader fr_temp = *fr;
-
                 fr_temp.current = fr_temp.buffer + t->offset;
                 cmap = (Cmap*)arena->push(sizeof(Cmap));
                 cmap->read(arena, &fr_temp);
@@ -311,11 +363,6 @@ void Font_Directory::print() const
 				t->tag_str[1], t->tag_str[0],
 				t->length, t->offset);
 	}
-}
-
-s16 Font_Directory::loca_type() const
-{
-    return *(s16*)(head_start + 50);
 }
 
 u16 Font_Directory::glyph_index(u16 code_point) const
@@ -358,7 +405,7 @@ u16 Font_Directory::glyph_index(u16 code_point) const
 
 u32 Font_Directory::glyph_offset(u16 glyph_index) const
 {
-    if (loca_type() == 0)
+    if (head->index_to_loc_format == 0)
     {
         // short offsets
         return swap_endianness_16((u16*)loca_start + glyph_index) * 2;
@@ -370,9 +417,9 @@ u32 Font_Directory::glyph_offset(u16 glyph_index) const
     }
 }
 
-Glyph_Outline Font_Directory::glyph_outline(Arena* arena, File_Reader* fr, u16 glyph_index) const
+Glyph_Outline Font_Directory::glyph_outline(Arena* arena, File_Reader* fr, u16 code_point) const
 {
-    const u32 offset = glyph_offset(glyph_index);
+    const u32 offset = glyph_offset(glyph_index(code_point));
     fr->current = glyf_start + offset;
 
     Glyph_Outline glyph;

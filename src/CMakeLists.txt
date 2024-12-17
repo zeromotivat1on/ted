@@ -3,10 +3,7 @@ add_executable(ted
                 main.cpp file_reader.cpp font.cpp)
                 
 target_precompile_headers(ted PUBLIC pch.h)
-
-if (WIN32)
-   target_sources(ted PRIVATE)
-endif()
+target_include_directories(ted PRIVATE "${PROJECT_SOURCE_DIR}/src")
 
 if(MSVC)
     target_compile_options(ted PUBLIC "/Zc:__cplusplus")
@@ -19,7 +16,3 @@ target_compile_definitions(ted PRIVATE
                                # Configuration
                                $<$<CONFIG:Debug>:BUILD_DEBUG>
                                $<$<CONFIG:Release>:BUILD_RELEASE>)
-
-# Add GDL
-add_subdirectory("${PROJECT_SOURCE_DIR}/src/gdl")
-target_link_libraries(ted PRIVATE gdl)

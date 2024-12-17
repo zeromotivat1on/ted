@@ -38,6 +38,29 @@ struct Table_Directory
     void read(File_Reader* fr);
 };
 
+struct Head
+{
+    s32 version; // fixed
+    s32 font_revision; // fixed
+    u32 checksum_adjustment;
+    u32 magic_number;
+    u16 flags;
+    u16 units_per_em;
+    s64 created; // seconds since 12:00 midnight, January 1, 1904.
+    s64 modified; // seconds since 12:00 midnight, January 1, 1904.
+    s16 x_min;
+    s16 y_min;
+    s16 x_max;
+    s16 y_max;
+    u16 mac_style;
+    u16 lowest_rec_ppem; // smallest readable size in pixels
+    s16 font_direction_hint;
+    s16 index_to_loc_format;
+    s16 glyph_data_format;
+
+    void read(File_Reader* fr);
+};
+
 struct Cmap_Encoding_Subtable
 {
     u16 platform_id;
@@ -116,6 +139,7 @@ struct Font_Directory
 {
     Offset_Subtable offset_subtable;
     Table_Directory* table_directories;
+    Head* head;
     Cmap* cmap;
     Format4* format4;
     u8* glyf_start;
@@ -124,8 +148,7 @@ struct Font_Directory
     
     void read(Arena* arena, File_Reader* fr);
     void print() const;
-    s16 loca_type() const;
     u16 glyph_index(u16 code_point) const;
     u32 glyph_offset(u16 glyph_index) const;
-    Glyph_Outline glyph_outline(Arena* arena, File_Reader* fr, u16 glyph_index) const;
+    Glyph_Outline glyph_outline(Arena* arena, File_Reader* fr, u16 code_point) const;
 };

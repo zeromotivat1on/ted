@@ -15,5 +15,7 @@ struct File_Reader
     u16         eat_u16();
     s32         eat_s32();
     u32         eat_u32();
+    s64         eat_s64();
+    u64         eat_u64();
     void        eat_str(char* str, u32 len);
 };

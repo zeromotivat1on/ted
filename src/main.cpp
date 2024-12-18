@@ -17,27 +17,31 @@ void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
 
 int main()
 {
-#if 1
+#if 0
     const char* font_path = "C:/Users/admin/Downloads/Envy_Code_R_PR7/Envy_Code_R.ttf";
 #else
     const char* font_path = "C:/Users/admin/Downloads/consola.ttf";
 #endif
     
-    constexpr u64 k_arena_size = MB(32);
-    Arena global_arena = create_arena(malloc(k_arena_size), k_arena_size);
+    constexpr u64 k_app_arena_size = MB(4);
+    Arena app_arena = create_arena(malloc(k_app_arena_size), k_app_arena_size);
 
-    Arena font_arena = global_arena.subarena(MB(1));
+    Arena font_arena = app_arena.subarena(MB(1));
     Font_Directory fd;
     file_handle font = open_file(font_path, FILE_OPEN_EXISTING, FILE_ACCESS_READ);
     
     File_Reader fr;
     fr.init(&font_arena, font);
         
-    fd.read(&font_arena, &fr);
+    fd.read(&fr, &font_arena);
     close_file(font);
 
-    const u16 units_per_em = fd.head->units_per_em;
-    msg_log("Font units per em (%u)", units_per_em);
+    msg_log("Font units_per_em (%u)", fd.head->units_per_em);
+    msg_log("Font num_glyphs (%u)", fd.maxp->num_glyphs);
+    msg_log("Font num_of_long_hor_metrics (%d)", fd.hhea->num_of_long_hor_metrics);
+    
+    //fd.cmap->print();
+    //fd.format4->print();
     
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -122,24 +126,24 @@ int main()
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 
-    Glyph_Outline glyph = fd.glyph_outline(&font_arena, &fr, 'A');
-    glyph.print();
+    Simple_Glyph sg = fd.simple_glyph_from_char(&fr, &font_arena, 'g');
+    sg.print();
 
+#if 1
     const u16 font_size = 16;
-    const u16 vertex_count = 3 * (glyph.end_pts_of_countours[glyph.number_of_countours - 1] + 1);
+    const u16 vertex_count = 3 * (sg.end_pts_of_countours[sg.glyph.number_of_countours - 1] + 1);
     f32* vertices = (f32*)malloc(vertex_count * sizeof(f32));
     for(u16 i = 0; i < vertex_count; i += 3)
     {
-        const f32 scale = (f32)font_size / (f32)units_per_em;
-        const f32 x_scaled = (f32)glyph.x_coordinates[i] * scale;
-        const f32 y_scaled = (f32)glyph.y_coordinates[i] * scale;
+        const f32 scale = (f32)font_size / (f32)fd.head->units_per_em;
+        const f32 x_scaled = (f32)sg.x_coordinates[i] * scale;
+        const f32 y_scaled = (f32)sg.y_coordinates[i] * scale;
         
         vertices[i + 0] = 2.0f * x_scaled / 800.0f - 1.0f;
         vertices[i + 1] = 1.0f - 2.0f * y_scaled / 600.0f;
         vertices[i + 2] = 0.0f;
 	}
-
-#if 0
+#else
     const f32 vertices[] = {
         0.5f,  0.5f, 0.0f,  // top right
         0.5f, -0.5f, 0.0f,  // bottom right

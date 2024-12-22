@@ -1,178 +1,97 @@
 #include "pch.h"
 #include "font.h"
-#include "file_reader.h"
+#include "memory_eater.h"
 #include <malloc.h>
 
-// True type font format is stored in big endian byte order,
-// so here are some file reader wrappers specifically for font.
-
-static s16 font_eat_s16(File_Reader* fr)
+void Offset_Subtable::read(void** data)
 {
-    s16 val = fr->eat_s16();
-
-    if (platform_little_endian())
-    {
-        val = swap_endianness_16(&val);
-    }
-    
-    return val;
+    scaler_type = eat_big_endian_u32(data);
+    num_tables = eat_big_endian_u16(data);
+    search_range = eat_big_endian_u16(data);
+    entry_selector = eat_big_endian_u16(data);
+    range_shift = eat_big_endian_u16(data);
 }
 
-static u16 font_eat_u16(File_Reader* fr)
+void Table_Directory::read(void** data)
 {
-    u16 val = fr->eat_u16();
-
-    if (platform_little_endian())
-    {
-        val = swap_endianness_16(&val);
-    }
-    
-    return val;
+    tag = eat_big_endian_u32(data);
+    checksum = eat_big_endian_u32(data);
+    offset = eat_big_endian_u32(data);
+    length = eat_big_endian_u32(data);
 }
 
-static s32 font_eat_s32(File_Reader* fr)
+void Head::read(void** data)
 {
-    s32 val = fr->eat_s32();
-
-    if (platform_little_endian())
-    {
-        val = swap_endianness_32(&val);
-    }
-    
-    return val;
+    version = eat_big_endian_s32(data);
+    font_revision = eat_big_endian_s32(data);
+    checksum_adjustment = eat_big_endian_u32(data);
+    magic_number = eat_big_endian_u32(data);
+    flags = eat_big_endian_u16(data);
+    units_per_em = eat_big_endian_u16(data);
+    created = eat_big_endian_s64(data);
+    modified = eat_big_endian_s64(data);
+    x_min = eat_big_endian_s16(data);
+    y_min = eat_big_endian_s16(data);
+    x_max = eat_big_endian_s16(data);
+    y_max = eat_big_endian_s16(data);
+    mac_style = eat_big_endian_u16(data);
+    lowest_rec_ppem = eat_big_endian_u16(data);
+    font_direction_hint = eat_big_endian_s16(data);
+    index_to_loc_format = eat_big_endian_s16(data);
+    glyph_data_format = eat_big_endian_s16(data);
 }
 
-static u32 font_eat_u32(File_Reader* fr)
+void Maxp::read(void** data)
 {
-    u32 val = fr->eat_u32();
-
-    if (platform_little_endian())
-    {
-        val = swap_endianness_32(&val);
-    }
-    
-    return val;
+    version = eat_big_endian_s32(data);
+    num_glyphs = eat_big_endian_u16(data);
+    max_points = eat_big_endian_u16(data);
+    max_contours = eat_big_endian_u16(data);
+    max_component_points = eat_big_endian_u16(data);
+    max_component_contours = eat_big_endian_u16(data);
+    max_zones = eat_big_endian_u16(data);
+    max_twilight_points = eat_big_endian_u16(data);
+    max_storage = eat_big_endian_u16(data);
+    max_function_defs = eat_big_endian_u16(data);
+    max_instruction_defs = eat_big_endian_u16(data);
+    max_stack_elements = eat_big_endian_u16(data);
+    max_size_of_instructions = eat_big_endian_u16(data);
+    max_component_elements = eat_big_endian_u16(data);
+    max_component_depth = eat_big_endian_u16(data);
 }
 
-static u64 font_eat_u64(File_Reader* fr)
+void Hhea::read(void** data)
 {
-    u64 val = fr->eat_u64();
-
-    if (platform_little_endian())
-    {
-        val = swap_endianness_64(&val);
-    }
-    
-    return val;
+    version = eat_big_endian_s32(data);
+    ascent = eat_big_endian_s16(data);
+    descent = eat_big_endian_s16(data);
+    line_gap = eat_big_endian_s16(data);
+    advance_width_max = eat_big_endian_u16(data);
+    min_left_side_bearing = eat_big_endian_s16(data);
+    min_right_side_bearing = eat_big_endian_s16(data);
+    x_max_extent = eat_big_endian_s16(data);
+    caret_slope_rise = eat_big_endian_s16(data);
+    caret_slope_run = eat_big_endian_s16(data);
+    caret_offset = eat_big_endian_s16(data);
+    eat(data, 4 * sizeof(s16)); // skip reserved
+    metric_data_format = eat_big_endian_s16(data);
+    num_of_long_hor_metrics = eat_big_endian_u16(data);
 }
 
-static s64 font_eat_s64(File_Reader* fr)
+void Long_Hor_Metric::read(void** data)
 {
-    s64 val = fr->eat_s64();
-
-    if (platform_little_endian())
-    {
-        val = swap_endianness_64(&val);
-    }
-    
-    return val;
+    advance_width = eat_big_endian_u16(data);
+    left_side_bearing = eat_big_endian_s16(data);
 }
 
-static f32 font_eat_f2dot14(File_Reader* fr)
-{
-    s16 val = fr->eat_s16();
-    return val / (f32)(1 << 14);
-}
-
-void Offset_Subtable::read(File_Reader* fr)
-{
-    scaler_type = font_eat_u32(fr);
-    num_tables = font_eat_u16(fr);
-    search_range = font_eat_u16(fr);
-    entry_selector = font_eat_u16(fr);
-    range_shift = font_eat_u16(fr);
-}
-
-void Table_Directory::read(File_Reader* fr)
-{
-    tag = font_eat_u32(fr);
-    checksum = font_eat_u32(fr);
-    offset = font_eat_u32(fr);
-    length = font_eat_u32(fr);
-}
-
-void Head::read(File_Reader* fr)
-{
-    version = font_eat_s32(fr);
-    font_revision = font_eat_s32(fr);
-    checksum_adjustment = font_eat_u32(fr);
-    magic_number = font_eat_u32(fr);
-    flags = font_eat_u16(fr);
-    units_per_em = font_eat_u16(fr);
-    created = font_eat_s64(fr);
-    modified = font_eat_s64(fr);
-    x_min = font_eat_s16(fr);
-    y_min = font_eat_s16(fr);
-    x_max = font_eat_s16(fr);
-    y_max = font_eat_s16(fr);
-    mac_style = font_eat_u16(fr);
-    lowest_rec_ppem = font_eat_u16(fr);
-    font_direction_hint = font_eat_s16(fr);
-    index_to_loc_format = font_eat_s16(fr);
-    glyph_data_format = font_eat_s16(fr);
-}
-
-void Maxp::read(File_Reader* fr)
-{
-    version = font_eat_s32(fr);
-    num_glyphs = font_eat_u16(fr);
-    max_points = font_eat_u16(fr);
-    max_contours = font_eat_u16(fr);
-    max_component_points = font_eat_u16(fr);
-    max_component_contours = font_eat_u16(fr);
-    max_zones = font_eat_u16(fr);
-    max_twilight_points = font_eat_u16(fr);
-    max_storage = font_eat_u16(fr);
-    max_function_defs = font_eat_u16(fr);
-    max_instruction_defs = font_eat_u16(fr);
-    max_stack_elements = font_eat_u16(fr);
-    max_size_of_instructions = font_eat_u16(fr);
-    max_component_elements = font_eat_u16(fr);
-    max_component_depth = font_eat_u16(fr);
-}
-
-void Hhea::read(File_Reader* fr)
-{
-    version = font_eat_s32(fr);
-    ascent = font_eat_s16(fr);
-    descent = font_eat_s16(fr);
-    line_gap = font_eat_s16(fr);
-    advance_width_max = font_eat_u16(fr);
-    min_left_side_bearing = font_eat_s16(fr);
-    min_right_side_bearing = font_eat_s16(fr);
-    x_max_extent = font_eat_s16(fr);
-    caret_slope_rise = font_eat_s16(fr);
-    caret_slope_run = font_eat_s16(fr);
-    caret_offset = font_eat_s16(fr);
-    fr->eat(4 * sizeof(s16)); // skip reserved
-    metric_data_format = font_eat_s16(fr);
-    num_of_long_hor_metrics = font_eat_u16(fr);
-}
-
-void Long_Hor_Metric::read(File_Reader* fr)
-{
-    advance_width = font_eat_u16(fr);
-    left_side_bearing = font_eat_s16(fr);
-}
-
-void Hmtx::read(File_Reader* fr, Arena* arena, u16 num_glyphs, u16 num_of_long_hor_metrics)
+void Hmtx::read(Arena* arena, void** data, u16 num_glyphs, u16 num_of_long_hor_metrics)
 {
     // @Note: maybe just memcpy blocks instead of eating each value.
     
     h_metrics = (Long_Hor_Metric*)arena->push(num_of_long_hor_metrics * sizeof(Long_Hor_Metric));
     for (u16 i = 0; i < num_of_long_hor_metrics; ++i)
     {
-        h_metrics[i].read(fr);
+        h_metrics[i].read(data);
     }
     
     const u16 num_of_left_side_bearings = num_glyphs - num_of_long_hor_metrics;
@@ -180,11 +99,11 @@ void Hmtx::read(File_Reader* fr, Arena* arena, u16 num_glyphs, u16 num_of_long_h
 
     for (u16 i = 0; i < num_of_left_side_bearings; ++i)
     {
-        left_side_bearings[i] = font_eat_s16(fr);
+        left_side_bearings[i] = eat_big_endian_s16(data);
     }    
 }
 
-void Loca::read(File_Reader* fr, Arena* arena, u16 num_glyphs, s16 index_to_loc_format)
+void Loca::read(Arena* arena, void** data, u16 num_glyphs, s16 index_to_loc_format)
 {
     offsets = (u32*)arena->push((num_glyphs + 1) * sizeof(u32));
     
@@ -192,30 +111,30 @@ void Loca::read(File_Reader* fr, Arena* arena, u16 num_glyphs, s16 index_to_loc_
     {
         if (index_to_loc_format == 0)
         {
-            offsets[i] = font_eat_u16(fr) * 2;
+            offsets[i] = eat_big_endian_u16(data) * 2;
         }
         else
         {
-            offsets[i] = font_eat_u32(fr);       
+            offsets[i] = eat_big_endian_u32(data);       
         }
     }
 }
 
-void Cmap_Encoding_Subtable::read(File_Reader* fr)
+void Cmap_Encoding_Subtable::read(void** data)
 {
-    platform_id = font_eat_u16(fr);
-    platform_specific_id = font_eat_u16(fr);
-    offset = font_eat_u32(fr);
+    platform_id = eat_big_endian_u16(data);
+    platform_specific_id = eat_big_endian_u16(data);
+    offset = eat_big_endian_u32(data);
 }
 
-void Cmap::read(File_Reader* fr, Arena* arena)
+void Cmap::read(Arena* arena, void** data)
 {
-    version = font_eat_u16(fr);
-    number_subtables = font_eat_u16(fr);
+    version = eat_big_endian_u16(data);
+    number_subtables = eat_big_endian_u16(data);
 
     subtables = (Cmap_Encoding_Subtable*)arena->push(number_subtables * sizeof(Cmap_Encoding_Subtable));
     for (u16 i = 0; i < number_subtables; ++i)
-        subtables[i].read(fr);
+        subtables[i].read(data);
 }
 
 void Cmap::print() const
@@ -243,52 +162,52 @@ void Cmap::print() const
 	}
 }
 
-void Format4::read(File_Reader* fr, Arena* arena)
+void Format4::read(Arena* arena, void** data)
 {
-    u8* start = fr->current;
+    void* start = *data;
     
-    format = font_eat_u16(fr);
+    format = eat_big_endian_u16(data);
     ASSERT(format == 4);
-    length = font_eat_u16(fr);
-    language = font_eat_u16(fr);
-    seg_count_x2 = font_eat_u16(fr);
-    search_range = font_eat_u16(fr);
-    entry_selector = font_eat_u16(fr);
-    range_shift = font_eat_u16(fr);
+    length = eat_big_endian_u16(data);
+    language = eat_big_endian_u16(data);
+    seg_count_x2 = eat_big_endian_u16(data);
+    search_range = eat_big_endian_u16(data);
+    entry_selector = eat_big_endian_u16(data);
+    range_shift = eat_big_endian_u16(data);
 
     const u16 seg_count = seg_count_x2 / 2;
     end_code = (u16*)arena->push(seg_count * sizeof(u16));
     for (u16 i = 0; i < seg_count; ++i)
     {
-        end_code[i] = font_eat_u16(fr);
+        end_code[i] = eat_big_endian_u16(data);
     }
 
-    fr->eat_u16(); // skip reserved
+    eat_u16(data); // skip reserved
     
     start_code = (u16*)arena->push(seg_count * sizeof(u16));
     for (u16 i = 0; i < seg_count; ++i)
     {
-        start_code[i] = font_eat_u16(fr);
+        start_code[i] = eat_big_endian_u16(data);
     }
 
     id_delta = (u16*)arena->push(seg_count * sizeof(u16));
     for (u16 i = 0; i < seg_count; ++i)
     {
-        id_delta[i] = font_eat_u16(fr);
+        id_delta[i] = eat_big_endian_u16(data);
     }
 
     id_range_offset = (u16*)arena->push(seg_count * sizeof(u16));
     for (u16 i = 0; i < seg_count; ++i)
     {
-        id_range_offset[i] = font_eat_u16(fr);
+        id_range_offset[i] = eat_big_endian_u16(data);
     }
     
-    const u32 remaining_bytes = length - (u32)(fr->current - start);
+    const u32 remaining_bytes = length - (u32)((u8*)*data - (u8*)start);
     const u32 glyph_index_count = remaining_bytes / 2;
     glyph_index_array = (u16*)arena->push(remaining_bytes);
     
     for (u32 i = 0; i < glyph_index_count; ++i)
-        glyph_index_array[i] = font_eat_u16(fr);
+        glyph_index_array[i] = eat_big_endian_u16(data);
 }
 
 void Format4::print() const
@@ -309,14 +228,14 @@ void Format4::print() const
     }
 }
 
-u16 Format4::glyph_index(u16 code_point) const
+u16 Format4::glyph_index(u32 character) const
 {
     const u16 seg_count = seg_count_x2 / 2;
     s32 index = -1;
     
 	for (u16 i = 0; i < seg_count; i++)
     {
-		if (end_code[i] > code_point)
+		if (end_code[i] > character)
         {
             index = i;
             break;
@@ -326,12 +245,12 @@ u16 Format4::glyph_index(u16 code_point) const
 	if (index == -1)
         return 0;
 
-	if (start_code[index] < code_point)
+	if (start_code[index] < character)
     {
 		if (id_range_offset[index] != 0)
         {
 			u16* ptr = id_range_offset + index + id_range_offset[index] / 2;
-			ptr += code_point - start_code[index];
+			ptr += character - start_code[index];
             
 			if (*ptr == 0)
                 return 0;
@@ -340,47 +259,47 @@ u16 Format4::glyph_index(u16 code_point) const
 		}
         else
         {
-			return code_point + id_delta[index];
+			return character + id_delta[index];
 		}
 	}
 
 	return 0;
 }
 
-void Glyph::read(File_Reader* fr)
+void Glyph_Header::read(void** data)
 {
-    number_of_countours = font_eat_s16(fr);
-    x_min = font_eat_s16(fr);
-    y_min = font_eat_s16(fr);
-    x_max = font_eat_s16(fr);
-    y_max = font_eat_s16(fr);
+    number_of_countours = eat_big_endian_s16(data);
+    x_min = eat_big_endian_s16(data);
+    y_min = eat_big_endian_s16(data);
+    x_max = eat_big_endian_s16(data);
+    y_max = eat_big_endian_s16(data);
 }
 
-void Simple_Glyph::read(File_Reader* fr, Arena* arena)
+void Simple_Glyph::read(Arena* arena, void** data)
 {
-    glyph.read(fr);
+    header.read(data);
 
-    end_pts_of_countours = (u16*)arena->push(glyph.number_of_countours * sizeof(u16));
-    for (s16 i = 0; i < glyph.number_of_countours; ++i)
+    end_pts_of_countours = (u16*)arena->push(header.number_of_countours * sizeof(u16));
+    for (s16 i = 0; i < header.number_of_countours; ++i)
     {
-        end_pts_of_countours[i] = font_eat_u16(fr);
+        end_pts_of_countours[i] = eat_big_endian_u16(data);
     }
 
-    instruction_length = font_eat_u16(fr);
+    instruction_length = eat_big_endian_u16(data);
     instructions = (u8*)arena->push(instruction_length);
-    memcpy(instructions, fr->current, instruction_length);
-    fr->current += instruction_length;
+    void* instruction_start = eat(data, instruction_length);
+    memcpy(instructions, instruction_start, instruction_length);
 
-    const u16 last_idx = end_pts_of_countours[glyph.number_of_countours - 1];
+    const u16 last_idx = end_pts_of_countours[header.number_of_countours - 1];
     flags = (Glyph_Outline_Flag*)arena->push(last_idx + 1);
 
     for (u16 i = 0; i <= last_idx; ++i)
     {
-        flags[i].val = fr->eat_u8();
+        flags[i].val = eat_u8(data);
 
         if (flags[i].repeat)
         {
-            u8 repeat_count = fr->eat_u8();
+            u8 repeat_count = eat_u8(data);
             while (repeat_count > 0)
             {
                 i++;
@@ -399,10 +318,10 @@ void Simple_Glyph::read(File_Reader* fr, Arena* arena)
         const u8 combined_flag = flags[i].x_short << 1 | flags[i].x_same;
         switch (combined_flag)
         {
-            case 0: curr_coordinate = font_eat_s16(fr); break;
+            case 0: curr_coordinate = eat_big_endian_s16(data); break;
             case 1: curr_coordinate = 0; break;
-            case 2: curr_coordinate = -fr->eat_u8(); break;
-            case 3: curr_coordinate = fr->eat_u8(); break;
+            case 2: curr_coordinate = -eat_u8(data); break;
+            case 3: curr_coordinate = eat_u8(data); break;
         }
         
         x_coordinates[i] = curr_coordinate + prev_coordinate;
@@ -418,10 +337,10 @@ void Simple_Glyph::read(File_Reader* fr, Arena* arena)
         const u8 combined_flag = flags[i].y_short << 1 | flags[i].y_same;
         switch (combined_flag)
         {
-            case 0: curr_coordinate = font_eat_s16(fr); break;
+            case 0: curr_coordinate = eat_big_endian_s16(data); break;
             case 1: curr_coordinate = 0; break;
-            case 2: curr_coordinate = -fr->eat_u8(); break;
-            case 3: curr_coordinate = fr->eat_u8(); break;
+            case 2: curr_coordinate = -eat_u8(data); break;
+            case 3: curr_coordinate = eat_u8(data); break;
         }
         
         y_coordinates[i] = curr_coordinate + prev_coordinate;
@@ -432,33 +351,33 @@ void Simple_Glyph::read(File_Reader* fr, Arena* arena)
 void Simple_Glyph::print() const
 {
     msg_log("#contours\t(x_min, y_min)\t(x_max, y_max)\tinstruction_length");
-	msg_log("%9d\t(%d,%d)\t\t(%d,%d)\t%d", glyph.number_of_countours,
-			glyph.x_min, glyph.y_min,
-			glyph.x_max, glyph.y_max,
+	msg_log("%9d\t(%d,%d)\t\t(%d,%d)\t%d", header.number_of_countours,
+			header.x_min, header.y_min,
+			header.x_max, header.y_max,
 			instruction_length);
 
 	msg_log("#)\t(  x  ,  y  )");
-	const u16 last_idx = end_pts_of_countours[glyph.number_of_countours - 1];
+	const u16 last_idx = end_pts_of_countours[header.number_of_countours - 1];
 	for(u16 i = 0; i <= last_idx; ++i)
     {
 		msg_log("%d)\t(%5d,%5d)", i + 1, x_coordinates[i], y_coordinates[i]);
 	}
 }
 
-void Component_Glyph_Part::read(File_Reader* fr)
+void Component_Glyph_Part::read(void** data)
 {
-    flag.val = font_eat_u16(fr);
-    glyph_index = font_eat_u16(fr);
+    flag.val = eat_big_endian_u16(data);
+    glyph_index = eat_big_endian_u16(data);
 
     if (flag.arg_1_and_2_are_words)
     {
-        argument1 = font_eat_s16(fr);
-        argument2 = font_eat_s16(fr);
+        argument1 = eat_big_endian_s16(data);
+        argument2 = eat_big_endian_s16(data);
     }
     else
     {
-        argument1 = fr->eat_s8();
-        argument2 = fr->eat_s8();
+        argument1 = eat_s8(data);
+        argument2 = eat_s8(data);
     }
 
     e = 0.0f;
@@ -482,49 +401,48 @@ void Component_Glyph_Part::read(File_Reader* fr)
 
     if (flag.we_have_a_scale)
     {
-        a = font_eat_f2dot14(fr);
+        a = eat_big_endian_f2dot14(data);
         d = a;
     }
     else if (flag.we_have_an_x_and_y_scale)
     {
-        a = font_eat_f2dot14(fr);
-        d = font_eat_f2dot14(fr);
+        a = eat_big_endian_f2dot14(data);
+        d = eat_big_endian_f2dot14(data);
     }
     else if (flag.we_have_a_two_by_two)
     {
-        a = font_eat_f2dot14(fr);
-        b = font_eat_f2dot14(fr);
-        c = font_eat_f2dot14(fr);
-        d = font_eat_f2dot14(fr);
+        a = eat_big_endian_f2dot14(data);
+        b = eat_big_endian_f2dot14(data);
+        c = eat_big_endian_f2dot14(data);
+        d = eat_big_endian_f2dot14(data);
     }
 }
 
-void Compound_Glyph::read(File_Reader* fr, Arena* arena, const Font_Directory* fd)
+void Compound_Glyph::read(Arena* arena, void** data, const Font_Directory* fd)
 {
-    glyph.read(fr);
+    header.read(data);
 
     const u32 def_parts_length = 32 * sizeof(Component_Glyph_Part);
-    const u32 def_simple_glyphs_length = 32 * sizeof(Simple_Glyph);
+    //const u32 def_simple_glyphs_length = 32 * sizeof(Simple_Glyph);
     parts = (Component_Glyph_Part*)arena->push(def_parts_length);
-    simple_glyphs = (Simple_Glyph*)arena->push(def_simple_glyphs_length);
+    //simple_glyphs = (Simple_Glyph*)arena->push(def_simple_glyphs_length);
 
     u32 actual_parts_length = 0;
-    u32 actual_simple_glyphs_length = 0;
+    //u32 actual_simple_glyphs_length = 0;
     u16 idx = 0;
     
     while (true)
     {
         Component_Glyph_Part* part = parts + idx;
-        part->read(fr);
+        part->read(data);
 
-        u8* current = fr->current;
+        /*
         Simple_Glyph* simple = simple_glyphs + idx;
-        *simple = fd->simple_glyph_from_index(fr, arena, part->glyph_index);
-        fr->current = current;
+        *simple = fd->simple_glyph_from_index(arena, part->glyph_index);
 
         // Transform all simple glyph coordinates.
         // @Todo: move this to other place, here we want to simply read all needed data.
-        const u16 last_idx = simple->end_pts_of_countours[simple->glyph.number_of_countours - 1];
+        const u16 last_idx = simple->end_pts_of_countours[simple->header.number_of_countours - 1];
         for(u16 i = 0; i <= last_idx; ++i)
         {
             f32 x = simple->x_coordinates[i];
@@ -536,11 +454,12 @@ void Compound_Glyph::read(File_Reader* fr, Arena* arena, const Font_Directory* f
             simple->x_coordinates[i] = (s16)x;
             simple->y_coordinates[i] = (s16)y;
         }
+        actual_simple_glyphs_length += sizeof(Simple_Glyph);
+        */
         
         idx++;
         actual_parts_length += sizeof(Component_Glyph_Part);
-        actual_simple_glyphs_length += sizeof(Simple_Glyph);
-
+        
         if (!part->flag.more_components)
             break;
     }
@@ -548,17 +467,19 @@ void Compound_Glyph::read(File_Reader* fr, Arena* arena, const Font_Directory* f
     // Pop extra memory for component glyph parts pushed earlier.
     // @Todo: there is a hole between parts and simple glyphs memory blocks after pop.
     
-    ASSERT(actual_simple_glyphs_length < def_simple_glyphs_length);
-    arena->pop(def_simple_glyphs_length - actual_simple_glyphs_length);
+    //ASSERT(actual_simple_glyphs_length < def_simple_glyphs_length);
+    //arena->pop(def_simple_glyphs_length - actual_simple_glyphs_length);
     
     ASSERT(actual_parts_length < def_parts_length);
     arena->pop(def_parts_length - actual_parts_length);
 }
 
-void Font_Directory::read(File_Reader* fr, Arena* arena)
+void Font_Directory::read(Arena* arena, void* data)
 {
+    void* data_start = data;
+    
     offset_subtable = (Offset_Subtable*)arena->push(sizeof(Offset_Subtable));
-    offset_subtable->read(fr);
+    offset_subtable->read(&data);
 
     table_directories = (Table_Directory*)arena->push(offset_subtable->num_tables * sizeof(Table_Directory));
     
@@ -566,56 +487,50 @@ void Font_Directory::read(File_Reader* fr, Arena* arena)
     for (u16 i = 0; i < offset_subtable->num_tables; ++i)
     {
         Table_Directory* t = table_directories + i;
-        t->read(fr);
-
-        // Save current position before possible table directory read.
-        u8* current = fr->current;
+        t->read(&data);
         
         switch (t->tag)
         {
             case HEAD_TAG:
             {
-                fr->current = fr->buffer + t->offset;
+                u8* head_data = (u8*)data_start + t->offset;
                 head = (Head*)arena->push(sizeof(Head));
-                head->read(fr);
+                head->read((void**)&head_data);
                 break;
             }
 
             case MAXP_TAG:
             {
-                fr->current = fr->buffer + t->offset;
+                u8* maxp_data = (u8*)data_start + t->offset;
                 maxp = (Maxp*)arena->push(sizeof(Maxp));
-                maxp->read(fr);
+                maxp->read((void**)&maxp_data);
                 break;
             }
 
             case HHEA_TAG:
             {
-                fr->current = fr->buffer + t->offset;
+                u8* hhea_data = (u8*)data_start + t->offset;
                 hhea = (Hhea*)arena->push(sizeof(Hhea));
-                hhea->read(fr);
+                hhea->read((void**)&hhea_data);
                 break;
             }
             
-            case GLYF_TAG: glyf_start = fr->buffer + t->offset; break;
+            case GLYF_TAG: glyf_start = (u8*)data_start + t->offset; break;
                 
             case CMAP_TAG:
             {
-                fr->current = fr->buffer + t->offset;
+                u8* cmap_data = (u8*)data_start + t->offset;
                 cmap = (Cmap*)arena->push(sizeof(Cmap));
-                cmap->read(fr, arena);
+                cmap->read(arena, (void**)&cmap_data);
 
                 // @Todo: assume 4th format by default for now, support others later.
-                fr->current = fr->buffer + t->offset + cmap->subtables[0].offset;
+                u8* format4_data = (u8*)data_start + t->offset + cmap->subtables[0].offset;
                 format4 = (Format4*)arena->push(sizeof(Format4));
-                format4->read(fr, arena);
+                format4->read(arena, (void**)&format4_data);
                 
                 break;
             }
         }
-
-        // Restore initial current position.
-        fr->current = current;
     }
 
     // Then read dependable specific table directories.
@@ -627,17 +542,17 @@ void Font_Directory::read(File_Reader* fr, Arena* arena)
         {
             case HMTX_TAG:
             {    
-                fr->current = fr->buffer + t->offset;
+                u8* hmtx_data = (u8*)data_start + t->offset;
                 hmtx = (Hmtx*)arena->push(sizeof(Hmtx));
-                hmtx->read(fr, arena, maxp->num_glyphs, hhea->num_of_long_hor_metrics);
+                hmtx->read(arena, (void**)&hmtx_data, maxp->num_glyphs, hhea->num_of_long_hor_metrics);
                 break;
             }
 
             case LOCA_TAG:
             {
-                fr->current = fr->buffer + t->offset;
+                u8* loca_data = (u8*)data_start + t->offset;
                 loca = (Loca*)arena->push(sizeof(Loca));
-                loca->read(fr, arena, maxp->num_glyphs, head->index_to_loc_format);
+                loca->read(arena, (void**)&loca_data, maxp->num_glyphs, head->index_to_loc_format);
                 break;
             }
         }
@@ -657,31 +572,200 @@ void Font_Directory::print() const
 	}
 }
 
-Simple_Glyph Font_Directory::simple_glyph_from_char(File_Reader* fr, Arena* arena, u16 code_point) const
+Simple_Glyph Font_Directory::simple_glyph_from_char(Arena* arena, u32 character) const
 {
-    const u16 glyph_idx = format4->glyph_index(code_point);
-    return simple_glyph_from_index(fr, arena, glyph_idx);
+    const u16 glyph_idx = format4->glyph_index(character);
+    return simple_glyph_from_index(arena, glyph_idx);
 }
 
-Simple_Glyph Font_Directory::simple_glyph_from_index(File_Reader* fr, Arena* arena, u16 glyph_index) const
+Simple_Glyph Font_Directory::simple_glyph_from_index(Arena* arena, u16 glyph_index) const
 {
     const u32 offset = loca->offsets[glyph_index];
-    fr->current = glyf_start + offset;
-
+    u8* glyph_data = glyf_start + offset;
+    
     Simple_Glyph glyph;
-    glyph.read(fr, arena);
+    glyph.read(arena, (void**)&glyph_data);
 
     return glyph;
 }
 
-Compound_Glyph Font_Directory::compound_glyph_from_char(File_Reader* fr, Arena* arena, u16 code_point) const
+Compound_Glyph Font_Directory::compound_glyph_from_char(Arena* arena, u32 character) const
 {
-    const u16 glyph_idx = format4->glyph_index(code_point);
+    const u16 glyph_idx = format4->glyph_index(character);
     const u32 offset = loca->offsets[glyph_idx];
-    fr->current = glyf_start + offset;
+    u8* glyph_data = glyf_start + offset;
 
     Compound_Glyph glyph;
-    glyph.read(fr, arena, this);
+    glyph.read(arena, (void**)&glyph_data, this);
 
     return glyph;
+}
+
+extern u8* read_entire_file(Arena* arena, const char* path, u32* size);
+
+void Font_Face::read(Arena* arena, void* data)
+{
+    dir = (Font_Directory*)arena->push(sizeof(Font_Directory));
+    dir->read(arena, data);
+
+    glyphs = (Glyph*)arena->push(dir->maxp->num_glyphs * sizeof(Glyph));
+    for (u32 c = 0; c < dir->maxp->num_glyphs; ++c)
+    {
+        const u16 glyph_index = dir->format4->glyph_index(c);
+        u8* glyph_data = dir->glyf_start + dir->loca->offsets[glyph_index];
+        const s16 num_contours = *(s16*)(glyph_data);
+
+        if (num_contours > 0)
+        {
+            read_simple_glyph(arena, c);
+        }
+        else
+        {
+            read_compound_glyph(arena, c);
+        }
+    }
+}
+
+void Font_Face::read_simple_glyph(Arena* arena, u32 character)
+{
+    Glyph* glyph = glyphs + character;
+
+    glyph->character = character;
+    glyph->index = dir->format4->glyph_index(character);
+    void* data = dir->glyf_start + dir->loca->offsets[glyph->index];    
+        
+    glyph->header.read(&data);
+    glyph->h_metric = dir->hmtx->h_metrics[glyph - glyphs];
+
+    const u32 contours_length = glyph->header.number_of_countours * sizeof(u16);
+    glyph->end_pts_of_countours = (u16*)arena->push(contours_length);
+    for (s16 i = 0; i < glyph->header.number_of_countours; ++i)
+    {
+        glyph->end_pts_of_countours[i] = eat_big_endian_u16(&data);
+    }
+
+    const u16 instruction_length = eat_big_endian_u16(&data); // skip instruction length
+    eat(&data, instruction_length); // skip instructions
+
+    const u16 last_idx = glyph->end_pts_of_countours[glyph->header.number_of_countours - 1];
+    const u32 flags_length = last_idx + 1;
+    Glyph_Outline_Flag* flags = (Glyph_Outline_Flag*)arena->push(flags_length);
+
+    for (u16 i = 0; i <= last_idx; ++i)
+    {
+        flags[i].val = eat_u8(&data);
+
+        if (flags[i].repeat)
+        {
+            u8 repeat_count = eat_u8(&data);
+            while (repeat_count > 0)
+            {
+                i++;
+                flags[i] = flags[i - 1];
+                repeat_count--;
+            }
+        }
+    }
+
+    const u32 coordinates_length = (last_idx + 1) * 2;
+    glyph->x_coordinates = (s16*)arena->push(coordinates_length);
+    s16 prev_coordinate = 0;
+    s16 curr_coordinate = 0;
+
+    for (u16 i = 0; i <= last_idx; ++i)
+    {
+        const u8 combined_flag = flags[i].x_short << 1 | flags[i].x_same;
+        switch (combined_flag)
+        {
+            case 0: curr_coordinate = eat_big_endian_s16(&data); break;
+            case 1: curr_coordinate = 0; break;
+            case 2: curr_coordinate = -eat_u8(&data); break;
+            case 3: curr_coordinate = eat_u8(&data); break;
+        }
+        
+        glyph->x_coordinates[i] = curr_coordinate + prev_coordinate;
+        prev_coordinate = glyph->x_coordinates[i];
+    }
+
+    glyph->y_coordinates = (s16*)arena->push(coordinates_length);
+    prev_coordinate = 0;
+    curr_coordinate = 0;
+
+    for (u16 i = 0; i <= last_idx; ++i)
+    {
+        const u8 combined_flag = flags[i].y_short << 1 | flags[i].y_same;
+        switch (combined_flag)
+        {
+            case 0: curr_coordinate = eat_big_endian_s16(&data); break;
+            case 1: curr_coordinate = 0; break;
+            case 2: curr_coordinate = -eat_u8(&data); break;
+            case 3: curr_coordinate = eat_u8(&data); break;
+        }
+        
+        glyph->y_coordinates[i] = curr_coordinate + prev_coordinate;
+        prev_coordinate = glyph->y_coordinates[i];
+    }
+
+    arena->pop(flags_length);
+}
+
+void Font_Face::read_compound_glyph(Arena* arena, u32 character)
+{
+    Glyph* glyph = glyphs + character;
+
+    glyph->character = character;
+    glyph->index = dir->format4->glyph_index(character);
+    void* data = dir->glyf_start + dir->loca->offsets[glyph->index];    
+
+    glyph->header.read(&data);
+    glyph->h_metric = dir->hmtx->h_metrics[glyph - glyphs];
+
+    const u32 def_parts_length = 32 * sizeof(Component_Glyph_Part);
+    Component_Glyph_Part* parts = (Component_Glyph_Part*)arena->push(def_parts_length);
+
+    u16 idx = 0;
+    u32 actual_parts_length = 0;
+    
+    while (true)
+    {
+        Component_Glyph_Part* part = parts + idx;
+        part->read(&data);
+
+        /*
+        Glyph* simple = simple_glyphs + idx;
+        *simple = fd->simple_glyph_from_index(arena, part->glyph_index);
+
+        // Transform all simple glyph coordinates.
+        const u16 last_idx = simple->end_pts_of_countours[simple->header.number_of_countours - 1];
+        for(u16 i = 0; i <= last_idx; ++i)
+        {
+            f32 x = simple->x_coordinates[i];
+            f32 y = simple->y_coordinates[i];
+
+            x = part->a * x + part->c * y + part->e;
+            y = part->b * x + part->d * y + part->f;
+            
+            simple->x_coordinates[i] = (s16)x;
+            simple->y_coordinates[i] = (s16)y;
+        }
+        */
+        
+        idx++;
+        actual_parts_length += sizeof(Component_Glyph_Part);
+        
+        if (!part->flag.more_components)
+            break;
+    }
+
+    // Pop extra memory pushed earlier.
+    ASSERT(actual_parts_length < def_parts_length);
+    arena->pop(def_parts_length - actual_parts_length);
+}
+
+Font_Face* create_font_face(Arena* arena, const char* font_path)
+{
+    u8* font_data = read_entire_file(arena, font_path, nullptr);
+    Font_Face* face = (Font_Face*)arena->push(sizeof(Font_Face));
+    face->read(arena, font_data);    
+    return face;
 }

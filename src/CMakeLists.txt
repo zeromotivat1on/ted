@@ -1,5 +1,5 @@
 add_executable(ted
-                file_reader.h font.h
+                file_reader.h font.h memory_eater.h
                 main.cpp file_reader.cpp font.cpp)
                 
 target_precompile_headers(ted PUBLIC pch.h)

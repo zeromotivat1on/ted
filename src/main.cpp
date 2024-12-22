@@ -5,6 +5,28 @@
 #include <glfw/glfw3.h>
 #include <malloc.h>
 
+u8* read_entire_file(Arena* arena, const char* path, u32* size)
+{
+    file_handle handle = open_file(path, FILE_OPEN_EXISTING, FILE_ACCESS_READ);
+    if (handle == INVALID_FILE_HANDLE)
+    {
+        close_file(handle);
+        return nullptr;
+    }
+    
+    const u32 handle_size = (u32)file_size(handle);    
+    if (size)
+        *size = handle_size;
+
+    u64 bytes_read = 0;
+    u8* buffer = (u8*)arena->push(handle_size);
+    read_file_sync(handle, buffer, handle_size, &bytes_read);
+    ASSERT(bytes_read == handle_size);
+    
+    close_file(handle);
+    return buffer;
+}
+
 void char_callback(GLFWwindow* win, u32 character)
 {
     msg_log("Window char (%c)", character);
@@ -17,7 +39,7 @@ void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
 
 int main()
 {
-#if 0
+#if 1
     const char* font_path = "C:/Users/admin/Downloads/Envy_Code_R_PR7/Envy_Code_R.ttf";
 #else
     const char* font_path = "C:/Users/admin/Downloads/consola.ttf";
@@ -25,23 +47,34 @@ int main()
     
     constexpr u64 k_app_arena_size = MB(4);
     Arena app_arena = create_arena(malloc(k_app_arena_size), k_app_arena_size);
-
     Arena font_arena = app_arena.subarena(MB(1));
-    Font_Directory fd;
-    file_handle font = open_file(font_path, FILE_OPEN_EXISTING, FILE_ACCESS_READ);
-    
-    File_Reader fr;
-    fr.init(&font_arena, font);
-        
-    fd.read(&fr, &font_arena);
-    close_file(font);
 
-    msg_log("Font units_per_em (%u)", fd.head->units_per_em);
-    msg_log("Font num_glyphs (%u)", fd.maxp->num_glyphs);
+#if 0
+    u8* font_data = read_entire_file(&font_arena, font_path, nullptr);
+
+    Font_Directory fd;
+    fd.read(&font_arena, font_data);
+
+    const u16 units_per_em = fd.head->units_per_em;
+    const u16 num_glyphs = fd.maxp->num_glyphs;
+
     msg_log("Font num_of_long_hor_metrics (%d)", fd.hhea->num_of_long_hor_metrics);
     
     //fd.cmap->print();
     //fd.format4->print();
+
+    Simple_Glyph sg = fd.simple_glyph_from_char(&font_arena, 'A');
+    sg.print();
+#else
+    Font_Face* font_face = create_font_face(&font_arena, font_path);
+    const u16 units_per_em = font_face->dir->head->units_per_em;
+    const u16 num_glyphs = font_face->dir->maxp->num_glyphs;
+    
+    Glyph sg = font_face->glyphs['A'];
+#endif
+
+    msg_log("Font units_per_em (%u)", units_per_em);
+    msg_log("Font num_glyphs (%u)", num_glyphs);
     
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -126,16 +159,13 @@ int main()
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 
-    Simple_Glyph sg = fd.simple_glyph_from_char(&fr, &font_arena, 'g');
-    sg.print();
-
 #if 1
     const u16 font_size = 16;
-    const u16 vertex_count = 3 * (sg.end_pts_of_countours[sg.glyph.number_of_countours - 1] + 1);
+    const u16 vertex_count = 3 * (sg.end_pts_of_countours[sg.header.number_of_countours - 1] + 1);
     f32* vertices = (f32*)malloc(vertex_count * sizeof(f32));
     for(u16 i = 0; i < vertex_count; i += 3)
     {
-        const f32 scale = (f32)font_size / (f32)fd.head->units_per_em;
+        const f32 scale = (f32)font_size / (f32)units_per_em;
         const f32 x_scaled = (f32)sg.x_coordinates[i] * scale;
         const f32 y_scaled = (f32)sg.y_coordinates[i] * scale;
         

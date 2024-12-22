@@ -23,7 +23,7 @@ struct Offset_Subtable
     u16 entry_selector;
     u16 range_shift;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Table_Directory
@@ -38,7 +38,7 @@ struct Table_Directory
     u32 offset;
     u32 length;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Head
@@ -61,7 +61,7 @@ struct Head
     s16 index_to_loc_format;
     s16 glyph_data_format;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Maxp
@@ -82,7 +82,7 @@ struct Maxp
     u16 max_component_elements;
     u16 max_component_depth;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Hhea
@@ -102,7 +102,7 @@ struct Hhea
     s16 metric_data_format;
     u16 num_of_long_hor_metrics;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Long_Hor_Metric
@@ -110,7 +110,7 @@ struct Long_Hor_Metric
     u16 advance_width;
     s16 left_side_bearing;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Hmtx
@@ -118,14 +118,14 @@ struct Hmtx
     Long_Hor_Metric* h_metrics;
     s16* left_side_bearings;
 
-    void read(File_Reader* fr, Arena* arena, u16 num_glyphs, u16 num_of_long_hor_metrics);
+    void read(Arena* arena, void** data, u16 num_glyphs, u16 num_of_long_hor_metrics);
 };
 
 struct Loca
 {
     u32* offsets;
 
-    void read(File_Reader* fr, Arena* arena, u16 num_glyphs, s16 index_to_loc_format);
+    void read(Arena* arena, void** data, u16 num_glyphs, s16 index_to_loc_format);
 };
 
 struct Cmap_Encoding_Subtable
@@ -134,7 +134,7 @@ struct Cmap_Encoding_Subtable
     u16 platform_specific_id;
     u32 offset;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Cmap
@@ -143,7 +143,7 @@ struct Cmap
     u16 number_subtables;
     Cmap_Encoding_Subtable* subtables;
 
-    void read(File_Reader* fr, Arena* arena);
+    void read(Arena* arena, void** data);
     void print() const;
 };
 
@@ -163,9 +163,9 @@ struct Format4
 	u16* id_range_offset;
 	u16* glyph_index_array;
 
-    void read(File_Reader* fr, Arena* arena);
+    void read(Arena* arena, void** data);
     void print() const;
-    u16 glyph_index(u16 code_point) const;
+    u16 glyph_index(u32 character) const;
 };
 
 using Glyph_Outline_Flag = union
@@ -185,7 +185,7 @@ using Glyph_Outline_Flag = union
     };
 };
 
-struct Glyph
+struct Glyph_Header
 {
     s16 number_of_countours;
     s16 x_min;
@@ -193,12 +193,12 @@ struct Glyph
     s16 x_max;
     s16 y_max;
 
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Simple_Glyph
 {
-    Glyph glyph;
+    Glyph_Header header;
     u16* end_pts_of_countours;
     u16 instruction_length;
     u8* instructions;
@@ -206,7 +206,7 @@ struct Simple_Glyph
     s16* x_coordinates;
     s16* y_coordinates;
 
-    void read(File_Reader* fr, Arena* arena);
+    void read(Arena* arena, void** data);
     void print() const;
 };
 
@@ -231,7 +231,7 @@ using Component_Glyph_Flag = union
 };
 
 // @Note: maybe not the best way to store parsed data for (e, f)
-// as they are derived from argument1/2 when args_are_xy_values is set.
+// as they are derived from (argument1, argument2) when args_are_xy_values is set.
 struct Component_Glyph_Part
 {
     Component_Glyph_Flag flag;
@@ -245,23 +245,18 @@ struct Component_Glyph_Part
     f32 e; // mat2x3[0, 2] translation x
     f32 f; // mat2x3[1, 2] translation y
     
-    void read(File_Reader* fr);
+    void read(void** data);
 };
 
 struct Font_Directory;
 
 struct Compound_Glyph
 {
-    Glyph glyph;
+    Glyph_Header header;
     Component_Glyph_Part* parts;
-    Simple_Glyph* simple_glyphs;
+    //Simple_Glyph* simple_glyphs;
 
-    void read(File_Reader* fr, Arena* arena, const Font_Directory* fd);
-};
-
-struct Glyf
-{
-    
+    void read(Arena* arena, void** data, const Font_Directory* fd);
 };
 
 struct Font_Directory
@@ -277,9 +272,32 @@ struct Font_Directory
     Format4* format4;
     u8* glyf_start;
     
-    void read(File_Reader* fr, Arena* arena);
+    void read(Arena* arena, void* data);
     void print() const;
-    Simple_Glyph simple_glyph_from_char(File_Reader* fr, Arena* arena, u16 code_point) const;
-    Simple_Glyph simple_glyph_from_index(File_Reader* fr, Arena* arena, u16 glyph_index) const;
-    Compound_Glyph compound_glyph_from_char(File_Reader* fr, Arena* arena, u16 code_point) const;
+    Simple_Glyph simple_glyph_from_char(Arena* arena, u32 character) const;
+    Simple_Glyph simple_glyph_from_index(Arena* arena, u16 glyph_index) const;
+    Compound_Glyph compound_glyph_from_char(Arena* arena, u32 character) const;
 };
+
+struct Glyph
+{
+    Glyph_Header header;
+    Long_Hor_Metric h_metric;
+    u16* end_pts_of_countours;
+    s16* x_coordinates;
+    s16* y_coordinates;
+    u32 character;
+    u16 index;
+};
+
+struct Font_Face
+{
+    Font_Directory* dir;
+    Glyph* glyphs;
+
+    void read(Arena* arena, void* data);
+    void read_simple_glyph(Arena* arena, u32 character);
+    void read_compound_glyph(Arena* arena, u32 character);
+};
+
+Font_Face* create_font_face(Arena* arena, const char* font_path);

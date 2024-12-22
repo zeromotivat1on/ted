@@ -4,6 +4,9 @@
 #include <gdl/src/memory.h>
 #include <gdl/src/file.h>
 
+#define BIG_ENDIAN    __BYTE_ORDER == __BIG_ENDIAN
+#define LITTLE_ENDIAN __BYTE_ORDER == __LITTLE_ENDIAN
+
 inline bool platform_little_endian()
 {
     short int n = 0x1;

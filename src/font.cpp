@@ -1,655 +1,398 @@
 #include "pch.h"
 #include "font.h"
+#include "arena.h"
 #include "memory_eater.h"
+#include <stdio.h>
 #include <malloc.h>
 
-void Offset_Subtable::read(void** data)
+static inline void eat_offset_subtable(void** data, Offset_Subtable* table)
 {
-    scaler_type = eat_big_endian_u32(data);
-    num_tables = eat_big_endian_u16(data);
-    search_range = eat_big_endian_u16(data);
-    entry_selector = eat_big_endian_u16(data);
-    range_shift = eat_big_endian_u16(data);
+    table->scaler_type = eat_big_endian_u32(data);
+    table->num_tables = eat_big_endian_u16(data);
+    table->search_range = eat_big_endian_u16(data);
+    table->entry_selector = eat_big_endian_u16(data);
+    table->range_shift = eat_big_endian_u16(data);
 }
 
-void Table_Directory::read(void** data)
+static inline void eat_table_directory(void** data, Table_Directory* table)
 {
-    tag = eat_big_endian_u32(data);
-    checksum = eat_big_endian_u32(data);
-    offset = eat_big_endian_u32(data);
-    length = eat_big_endian_u32(data);
+    table->tag = eat_big_endian_u32(data);
+    table->checksum = eat_big_endian_u32(data);
+    table->offset = eat_big_endian_u32(data);
+    table->length = eat_big_endian_u32(data);
 }
 
-void Head::read(void** data)
+static inline void eat_head(void** data, Head* head)
 {
-    version = eat_big_endian_s32(data);
-    font_revision = eat_big_endian_s32(data);
-    checksum_adjustment = eat_big_endian_u32(data);
-    magic_number = eat_big_endian_u32(data);
-    flags = eat_big_endian_u16(data);
-    units_per_em = eat_big_endian_u16(data);
-    created = eat_big_endian_s64(data);
-    modified = eat_big_endian_s64(data);
-    x_min = eat_big_endian_s16(data);
-    y_min = eat_big_endian_s16(data);
-    x_max = eat_big_endian_s16(data);
-    y_max = eat_big_endian_s16(data);
-    mac_style = eat_big_endian_u16(data);
-    lowest_rec_ppem = eat_big_endian_u16(data);
-    font_direction_hint = eat_big_endian_s16(data);
-    index_to_loc_format = eat_big_endian_s16(data);
-    glyph_data_format = eat_big_endian_s16(data);
+    head->version = eat_big_endian_s32(data);
+    head->font_revision = eat_big_endian_s32(data);
+    head->checksum_adjustment = eat_big_endian_u32(data);
+    head->magic_number = eat_big_endian_u32(data);
+    head->flags = eat_big_endian_u16(data);
+    head->units_per_em = eat_big_endian_u16(data);
+    head->created = eat_big_endian_s64(data);
+    head->modified = eat_big_endian_s64(data);
+    head->x_min = eat_big_endian_s16(data);
+    head->y_min = eat_big_endian_s16(data);
+    head->x_max = eat_big_endian_s16(data);
+    head->y_max = eat_big_endian_s16(data);
+    head->mac_style = eat_big_endian_u16(data);
+    head->lowest_rec_ppem = eat_big_endian_u16(data);
+    head->font_direction_hint = eat_big_endian_s16(data);
+    head->index_to_loc_format = eat_big_endian_s16(data);
+    head->glyph_data_format = eat_big_endian_s16(data);
 }
 
-void Maxp::read(void** data)
+static inline void eat_maxp(void** data, Maxp* maxp)
 {
-    version = eat_big_endian_s32(data);
-    num_glyphs = eat_big_endian_u16(data);
-    max_points = eat_big_endian_u16(data);
-    max_contours = eat_big_endian_u16(data);
-    max_component_points = eat_big_endian_u16(data);
-    max_component_contours = eat_big_endian_u16(data);
-    max_zones = eat_big_endian_u16(data);
-    max_twilight_points = eat_big_endian_u16(data);
-    max_storage = eat_big_endian_u16(data);
-    max_function_defs = eat_big_endian_u16(data);
-    max_instruction_defs = eat_big_endian_u16(data);
-    max_stack_elements = eat_big_endian_u16(data);
-    max_size_of_instructions = eat_big_endian_u16(data);
-    max_component_elements = eat_big_endian_u16(data);
-    max_component_depth = eat_big_endian_u16(data);
+    maxp->version = eat_big_endian_s32(data);
+    maxp->num_glyphs = eat_big_endian_u16(data);
+    maxp->max_points = eat_big_endian_u16(data);
+    maxp->max_contours = eat_big_endian_u16(data);
+    maxp->max_component_points = eat_big_endian_u16(data);
+    maxp->max_component_contours = eat_big_endian_u16(data);
+    maxp->max_zones = eat_big_endian_u16(data);
+    maxp->max_twilight_points = eat_big_endian_u16(data);
+    maxp->max_storage = eat_big_endian_u16(data);
+    maxp->max_function_defs = eat_big_endian_u16(data);
+    maxp->max_instruction_defs = eat_big_endian_u16(data);
+    maxp->max_stack_elements = eat_big_endian_u16(data);
+    maxp->max_size_of_instructions = eat_big_endian_u16(data);
+    maxp->max_component_elements = eat_big_endian_u16(data);
+    maxp->max_component_depth = eat_big_endian_u16(data);
 }
 
-void Hhea::read(void** data)
+static inline void eat_hhea(void** data, Hhea* hhea)
 {
-    version = eat_big_endian_s32(data);
-    ascent = eat_big_endian_s16(data);
-    descent = eat_big_endian_s16(data);
-    line_gap = eat_big_endian_s16(data);
-    advance_width_max = eat_big_endian_u16(data);
-    min_left_side_bearing = eat_big_endian_s16(data);
-    min_right_side_bearing = eat_big_endian_s16(data);
-    x_max_extent = eat_big_endian_s16(data);
-    caret_slope_rise = eat_big_endian_s16(data);
-    caret_slope_run = eat_big_endian_s16(data);
-    caret_offset = eat_big_endian_s16(data);
+    hhea->version = eat_big_endian_s32(data);
+    hhea->ascent = eat_big_endian_s16(data);
+    hhea->descent = eat_big_endian_s16(data);
+    hhea->line_gap = eat_big_endian_s16(data);
+    hhea->advance_width_max = eat_big_endian_u16(data);
+    hhea->min_left_side_bearing = eat_big_endian_s16(data);
+    hhea->min_right_side_bearing = eat_big_endian_s16(data);
+    hhea->x_max_extent = eat_big_endian_s16(data);
+    hhea->caret_slope_rise = eat_big_endian_s16(data);
+    hhea->caret_slope_run = eat_big_endian_s16(data);
+    hhea->caret_offset = eat_big_endian_s16(data);
     eat(data, 4 * sizeof(s16)); // skip reserved
-    metric_data_format = eat_big_endian_s16(data);
-    num_of_long_hor_metrics = eat_big_endian_u16(data);
+    hhea->metric_data_format = eat_big_endian_s16(data);
+    hhea->num_of_long_hor_metrics = eat_big_endian_u16(data);
 }
 
-void Long_Hor_Metric::read(void** data)
-{
-    advance_width = eat_big_endian_u16(data);
-    left_side_bearing = eat_big_endian_s16(data);
-}
-
-void Hmtx::read(Arena* arena, void** data, u16 num_glyphs, u16 num_of_long_hor_metrics)
-{
-    // @Note: maybe just memcpy blocks instead of eating each value.
-    
-    h_metrics = (Long_Hor_Metric*)arena->push(num_of_long_hor_metrics * sizeof(Long_Hor_Metric));
+static inline void eat_hmtx(Arena* arena, void** data, u16 num_glyphs, u16 num_of_long_hor_metrics, Hmtx* hmtx)
+{   
+    hmtx->h_metrics = push_array(arena, num_of_long_hor_metrics, Long_Hor_Metric);
     for (u16 i = 0; i < num_of_long_hor_metrics; ++i)
     {
-        h_metrics[i].read(data);
+        hmtx->h_metrics[i].advance_width = eat_big_endian_u16(data);
+        hmtx->h_metrics[i].left_side_bearing = eat_big_endian_s16(data);
     }
     
     const u16 num_of_left_side_bearings = num_glyphs - num_of_long_hor_metrics;
-    left_side_bearings = (s16*)arena->push(num_of_left_side_bearings * sizeof(s16));
-
+    hmtx->left_side_bearings = push_array(arena, num_of_left_side_bearings, s16);
     for (u16 i = 0; i < num_of_left_side_bearings; ++i)
     {
-        left_side_bearings[i] = eat_big_endian_s16(data);
+        hmtx->left_side_bearings[i] = eat_big_endian_s16(data);
     }    
 }
 
-void Loca::read(Arena* arena, void** data, u16 num_glyphs, s16 index_to_loc_format)
+static inline void eat_loca(Arena* arena, void** data, u16 num_glyphs, s16 index_to_loc_format, Loca* loca)
 {
-    offsets = (u32*)arena->push((num_glyphs + 1) * sizeof(u32));
+    loca->offsets = push_array(arena, num_glyphs + 1, u32);
     
     for (u16 i = 0; i < num_glyphs + 1; ++i)
     {
         if (index_to_loc_format == 0)
         {
-            offsets[i] = eat_big_endian_u16(data) * 2;
+            loca->offsets[i] = eat_big_endian_u16(data) * 2;
         }
         else
         {
-            offsets[i] = eat_big_endian_u32(data);       
+            loca->offsets[i] = eat_big_endian_u32(data);       
         }
     }
 }
 
-void Cmap_Encoding_Subtable::read(void** data)
+static inline void eat_cmap(Arena* arena, void** data, Cmap* cmap)
 {
-    platform_id = eat_big_endian_u16(data);
-    platform_specific_id = eat_big_endian_u16(data);
-    offset = eat_big_endian_u32(data);
-}
+    cmap->version = eat_big_endian_u16(data);
+    cmap->number_subtables = eat_big_endian_u16(data);
 
-void Cmap::read(Arena* arena, void** data)
-{
-    version = eat_big_endian_u16(data);
-    number_subtables = eat_big_endian_u16(data);
-
-    subtables = (Cmap_Encoding_Subtable*)arena->push(number_subtables * sizeof(Cmap_Encoding_Subtable));
-    for (u16 i = 0; i < number_subtables; ++i)
-        subtables[i].read(data);
-}
-
-void Cmap::print() const
-{
-	msg_log("#)\tp_id\tps_id\toffset\ttype");
-
-    for (u16 i = 0; i < number_subtables; ++i)
+    cmap->subtables = push_array(arena, cmap->number_subtables, Cmap_Encoding_Subtable);
+    for (u16 i = 0; i < cmap->number_subtables; ++i)
     {
-        Cmap_Encoding_Subtable* cet = subtables + i;
-
-        char* platform_str = (char*)alloca(32);
-        switch (cet->platform_id)
-        {
-            case 0: platform_str = "Unicode"; break;
-            case 1: platform_str = "Mac"; break;
-            case 2: platform_str = "Not Supported"; break;
-            case 3: platform_str = "Microsoft"; break;
-        }
-        
-        msg_log("%u)\t%u\t%u\t%u\t%s", i + 1,
-                cet->platform_id,
-                cet->platform_specific_id,
-                cet->offset,
-                platform_str);
-	}
+        cmap->subtables[i].platform_id = eat_big_endian_u16(data);
+        cmap->subtables[i].platform_specific_id = eat_big_endian_u16(data);
+        cmap->subtables[i].offset = eat_big_endian_u32(data);
+    }
 }
 
-void Format4::read(Arena* arena, void** data)
+static inline void eat_format4(Arena* arena, void** data, Format4* f4)
 {
-    void* start = *data;
+    const u8* start = (u8*)*data;
     
-    format = eat_big_endian_u16(data);
-    ASSERT(format == 4);
-    length = eat_big_endian_u16(data);
-    language = eat_big_endian_u16(data);
-    seg_count_x2 = eat_big_endian_u16(data);
-    search_range = eat_big_endian_u16(data);
-    entry_selector = eat_big_endian_u16(data);
-    range_shift = eat_big_endian_u16(data);
+    f4->format = eat_big_endian_u16(data);
+    assert(f4->format == 4);
+    f4->length = eat_big_endian_u16(data);
+    f4->language = eat_big_endian_u16(data);
+    f4->seg_count_x2 = eat_big_endian_u16(data);
+    f4->search_range = eat_big_endian_u16(data);
+    f4->entry_selector = eat_big_endian_u16(data);
+    f4->range_shift = eat_big_endian_u16(data);
 
-    const u16 seg_count = seg_count_x2 / 2;
-    end_code = (u16*)arena->push(seg_count * sizeof(u16));
+    const u16 seg_count = f4->seg_count_x2 / 2;
+    f4->end_code = push_array(arena, seg_count, u16);
     for (u16 i = 0; i < seg_count; ++i)
-    {
-        end_code[i] = eat_big_endian_u16(data);
-    }
+        f4->end_code[i] = eat_big_endian_u16(data);
 
     eat_u16(data); // skip reserved
     
-    start_code = (u16*)arena->push(seg_count * sizeof(u16));
+    f4->start_code = push_array(arena, seg_count, u16);
     for (u16 i = 0; i < seg_count; ++i)
-    {
-        start_code[i] = eat_big_endian_u16(data);
-    }
+        f4->start_code[i] = eat_big_endian_u16(data);
 
-    id_delta = (u16*)arena->push(seg_count * sizeof(u16));
+    f4->id_delta = push_array(arena, seg_count, u16);
     for (u16 i = 0; i < seg_count; ++i)
-    {
-        id_delta[i] = eat_big_endian_u16(data);
-    }
+        f4->id_delta[i] = eat_big_endian_u16(data);
 
-    id_range_offset = (u16*)arena->push(seg_count * sizeof(u16));
+    f4->id_range_offset = push_array(arena, seg_count, u16);
     for (u16 i = 0; i < seg_count; ++i)
-    {
-        id_range_offset[i] = eat_big_endian_u16(data);
-    }
+        f4->id_range_offset[i] = eat_big_endian_u16(data);
     
-    const u32 remaining_bytes = length - (u32)((u8*)*data - (u8*)start);
+    const u32 remaining_bytes = f4->length - (u32)((u8*)*data - start);
     const u32 glyph_index_count = remaining_bytes / 2;
-    glyph_index_array = (u16*)arena->push(remaining_bytes);
+    f4->glyph_index_array = (u16*)push(arena, remaining_bytes);
     
     for (u32 i = 0; i < glyph_index_count; ++i)
-        glyph_index_array[i] = eat_big_endian_u16(data);
+        f4->glyph_index_array[i] = eat_big_endian_u16(data);
 }
 
-void Format4::print() const
+static u16 get_glyph_index(Format4* f4, u32 character)
 {
-    const u16 seg_count = seg_count_x2 / 2;
+    const u16 seg_count = f4->seg_count_x2 / 2;
 
-    msg_log("format: %u, length: %u, language: %u, seg_count: %u", format, length, language, seg_count);
-    msg_log("search_range: %u, entry_celector: %u, range_shift: %u)", search_range, entry_selector, range_shift);
-    msg_log("#)\tstart_code\tend_code\tid_delta\tid_range_offset");
-
-	for (u16 i = 0; i < seg_count; ++i)
-    {
-	    msg_log("%u)\t%10u\t%8u\t%8u\t%15u", i + 1,
-                start_code[i],
-                end_code[i],
-                id_delta[i],
-                id_range_offset[i]);
-    }
-}
-
-u16 Format4::glyph_index(u32 character) const
-{
-    const u16 seg_count = seg_count_x2 / 2;
-    s32 index = -1;
-    
+    s32 code_idx = -1;
 	for (u16 i = 0; i < seg_count; i++)
     {
-		if (end_code[i] > character)
+		if (f4->end_code[i] >= character)
         {
-            index = i;
+            code_idx = i;
             break;
         };
 	}
 	
-	if (index == -1)
+	if (code_idx == -1)
         return 0;
 
-	if (start_code[index] < character)
+	if (f4->start_code[code_idx] < character)
     {
-		if (id_range_offset[index] != 0)
+		if (f4->id_range_offset[code_idx] == 0)
         {
-			u16* ptr = id_range_offset + index + id_range_offset[index] / 2;
-			ptr += character - start_code[index];
-            
-			if (*ptr == 0)
-                return 0;
-            
-			return *ptr + id_delta[index];
-		}
+            return (character + f4->id_delta[code_idx]) % 65536;
+        }
         else
         {
-			return character + id_delta[index];
+            const u16 glyph_idx = *(f4->id_range_offset + code_idx + f4->id_range_offset[code_idx] / 2 + (character - f4->start_code[code_idx]));
+            
+			if (glyph_idx == 0)
+                return 0;
+            
+			return (glyph_idx + f4->id_delta[code_idx]) % 65536;
 		}
 	}
-
+    
 	return 0;
 }
 
-void Glyph_Header::read(void** data)
+static inline void eat_format12(Arena* arena, void** data, Format12* f12)
 {
-    number_of_countours = eat_big_endian_s16(data);
-    x_min = eat_big_endian_s16(data);
-    y_min = eat_big_endian_s16(data);
-    x_max = eat_big_endian_s16(data);
-    y_max = eat_big_endian_s16(data);
-}
-
-void Simple_Glyph::read(Arena* arena, void** data)
-{
-    header.read(data);
-
-    end_pts_of_countours = (u16*)arena->push(header.number_of_countours * sizeof(u16));
-    for (s16 i = 0; i < header.number_of_countours; ++i)
+    f12->format = eat_big_endian_u16(data);
+    assert(f12->format == 12);
+    eat_u16(data); // skip reserved
+    f12->length = eat_big_endian_u32(data);
+    f12->language = eat_big_endian_u32(data);
+    f12->n_groups = eat_big_endian_u32(data);
+    f12->groups = push_array(arena, f12->n_groups, Format12_Group);
+    
+    for (u32 i = 0; i < f12->n_groups; ++i)
     {
-        end_pts_of_countours[i] = eat_big_endian_u16(data);
-    }
-
-    instruction_length = eat_big_endian_u16(data);
-    instructions = (u8*)arena->push(instruction_length);
-    void* instruction_start = eat(data, instruction_length);
-    memcpy(instructions, instruction_start, instruction_length);
-
-    const u16 last_idx = end_pts_of_countours[header.number_of_countours - 1];
-    flags = (Glyph_Outline_Flag*)arena->push(last_idx + 1);
-
-    for (u16 i = 0; i <= last_idx; ++i)
-    {
-        flags[i].val = eat_u8(data);
-
-        if (flags[i].repeat)
-        {
-            u8 repeat_count = eat_u8(data);
-            while (repeat_count > 0)
-            {
-                i++;
-                flags[i] = flags[i - 1];
-                repeat_count--;
-            }
-        }
-    }
-
-    x_coordinates = (s16*)arena->push((last_idx + 1) * 2);
-    s16 prev_coordinate = 0;
-    s16 curr_coordinate = 0;
-
-    for (u16 i = 0; i <= last_idx; ++i)
-    {
-        const u8 combined_flag = flags[i].x_short << 1 | flags[i].x_same;
-        switch (combined_flag)
-        {
-            case 0: curr_coordinate = eat_big_endian_s16(data); break;
-            case 1: curr_coordinate = 0; break;
-            case 2: curr_coordinate = -eat_u8(data); break;
-            case 3: curr_coordinate = eat_u8(data); break;
-        }
-        
-        x_coordinates[i] = curr_coordinate + prev_coordinate;
-        prev_coordinate = x_coordinates[i];
-    }
-
-    y_coordinates = (s16*)arena->push((last_idx + 1) * 2);
-    prev_coordinate = 0;
-    curr_coordinate = 0;
-
-    for (u16 i = 0; i <= last_idx; ++i)
-    {
-        const u8 combined_flag = flags[i].y_short << 1 | flags[i].y_same;
-        switch (combined_flag)
-        {
-            case 0: curr_coordinate = eat_big_endian_s16(data); break;
-            case 1: curr_coordinate = 0; break;
-            case 2: curr_coordinate = -eat_u8(data); break;
-            case 3: curr_coordinate = eat_u8(data); break;
-        }
-        
-        y_coordinates[i] = curr_coordinate + prev_coordinate;
-        prev_coordinate = y_coordinates[i];
+        auto* group = f12->groups + i;
+        group->start_char_code = eat_big_endian_u32(data);
+        group->end_char_code = eat_big_endian_u32(data);
+        group->start_glyph_code = eat_big_endian_u32(data);
     }
 }
 
-void Simple_Glyph::print() const
+static u16 get_glyph_index(Format12* f12, u32 character)
 {
-    msg_log("#contours\t(x_min, y_min)\t(x_max, y_max)\tinstruction_length");
-	msg_log("%9d\t(%d,%d)\t\t(%d,%d)\t%d", header.number_of_countours,
-			header.x_min, header.y_min,
-			header.x_max, header.y_max,
-			instruction_length);
-
-	msg_log("#)\t(  x  ,  y  )");
-	const u16 last_idx = end_pts_of_countours[header.number_of_countours - 1];
-	for(u16 i = 0; i <= last_idx; ++i)
-    {
-		msg_log("%d)\t(%5d,%5d)", i + 1, x_coordinates[i], y_coordinates[i]);
-	}
+    return 0;
 }
 
-void Component_Glyph_Part::read(void** data)
+static inline void eat_font_directory(Arena* arena, void* data, Font_Directory* dir)
 {
-    flag.val = eat_big_endian_u16(data);
-    glyph_index = eat_big_endian_u16(data);
-
-    if (flag.arg_1_and_2_are_words)
-    {
-        argument1 = eat_big_endian_s16(data);
-        argument2 = eat_big_endian_s16(data);
-    }
-    else
-    {
-        argument1 = eat_s8(data);
-        argument2 = eat_s8(data);
-    }
-
-    e = 0.0f;
-    f = 0.0f;
+    u8* data_start = (u8*)data;
     
-    if (flag.args_are_xy_values)
-    {
-        e = (f32)argument1;
-        f = (f32)argument2;
-    }
-    else
-    {
-        // @Todo: handle points.
-        msg_critical("Unhandled entry in (%s:%d)", __FILE__, __LINE__);
-    }
-            
-    a = 1.0f;
-    b = 0.0f;
-    c = 0.0f;
-    d = 1.0f;
+    eat_offset_subtable(&data, &dir->offset_subtable);
 
-    if (flag.we_have_a_scale)
-    {
-        a = eat_big_endian_f2dot14(data);
-        d = a;
-    }
-    else if (flag.we_have_an_x_and_y_scale)
-    {
-        a = eat_big_endian_f2dot14(data);
-        d = eat_big_endian_f2dot14(data);
-    }
-    else if (flag.we_have_a_two_by_two)
-    {
-        a = eat_big_endian_f2dot14(data);
-        b = eat_big_endian_f2dot14(data);
-        c = eat_big_endian_f2dot14(data);
-        d = eat_big_endian_f2dot14(data);
-    }
-}
-
-void Compound_Glyph::read(Arena* arena, void** data, const Font_Directory* fd)
-{
-    header.read(data);
-
-    const u32 def_parts_length = 32 * sizeof(Component_Glyph_Part);
-    //const u32 def_simple_glyphs_length = 32 * sizeof(Simple_Glyph);
-    parts = (Component_Glyph_Part*)arena->push(def_parts_length);
-    //simple_glyphs = (Simple_Glyph*)arena->push(def_simple_glyphs_length);
-
-    u32 actual_parts_length = 0;
-    //u32 actual_simple_glyphs_length = 0;
-    u16 idx = 0;
+    dir->table_directories = push_array(arena, dir->offset_subtable.num_tables, Table_Directory);
     
-    while (true)
+    // First read all tables and non-dependable ones.
+    for (u16 i = 0; i < dir->offset_subtable.num_tables; ++i)
     {
-        Component_Glyph_Part* part = parts + idx;
-        part->read(data);
-
-        /*
-        Simple_Glyph* simple = simple_glyphs + idx;
-        *simple = fd->simple_glyph_from_index(arena, part->glyph_index);
-
-        // Transform all simple glyph coordinates.
-        // @Todo: move this to other place, here we want to simply read all needed data.
-        const u16 last_idx = simple->end_pts_of_countours[simple->header.number_of_countours - 1];
-        for(u16 i = 0; i <= last_idx; ++i)
-        {
-            f32 x = simple->x_coordinates[i];
-            f32 y = simple->y_coordinates[i];
-
-            x = part->a * x + part->c * y + part->e;
-            y = part->b * x + part->d * y + part->f;
-            
-            simple->x_coordinates[i] = (s16)x;
-            simple->y_coordinates[i] = (s16)y;
-        }
-        actual_simple_glyphs_length += sizeof(Simple_Glyph);
-        */
-        
-        idx++;
-        actual_parts_length += sizeof(Component_Glyph_Part);
-        
-        if (!part->flag.more_components)
-            break;
-    }
-
-    // Pop extra memory for component glyph parts pushed earlier.
-    // @Todo: there is a hole between parts and simple glyphs memory blocks after pop.
-    
-    //ASSERT(actual_simple_glyphs_length < def_simple_glyphs_length);
-    //arena->pop(def_simple_glyphs_length - actual_simple_glyphs_length);
-    
-    ASSERT(actual_parts_length < def_parts_length);
-    arena->pop(def_parts_length - actual_parts_length);
-}
-
-void Font_Directory::read(Arena* arena, void* data)
-{
-    void* data_start = data;
-    
-    offset_subtable = (Offset_Subtable*)arena->push(sizeof(Offset_Subtable));
-    offset_subtable->read(&data);
-
-    table_directories = (Table_Directory*)arena->push(offset_subtable->num_tables * sizeof(Table_Directory));
-    
-    // First read all table directories and non-dependable specific ones.
-    for (u16 i = 0; i < offset_subtable->num_tables; ++i)
-    {
-        Table_Directory* t = table_directories + i;
-        t->read(&data);
+        Table_Directory* t = dir->table_directories + i;
+        eat_table_directory(&data, t);
         
         switch (t->tag)
         {
             case HEAD_TAG:
             {
-                u8* head_data = (u8*)data_start + t->offset;
-                head = (Head*)arena->push(sizeof(Head));
-                head->read((void**)&head_data);
+                void* head_data = data_start + t->offset;
+                eat_head(&head_data, &dir->head);
                 break;
             }
 
             case MAXP_TAG:
             {
-                u8* maxp_data = (u8*)data_start + t->offset;
-                maxp = (Maxp*)arena->push(sizeof(Maxp));
-                maxp->read((void**)&maxp_data);
+                void* maxp_data = data_start + t->offset;
+                eat_maxp(&maxp_data, &dir->maxp);
                 break;
             }
 
             case HHEA_TAG:
             {
-                u8* hhea_data = (u8*)data_start + t->offset;
-                hhea = (Hhea*)arena->push(sizeof(Hhea));
-                hhea->read((void**)&hhea_data);
+                void* hhea_data = data_start + t->offset;
+                eat_hhea(&hhea_data, &dir->hhea);
                 break;
             }
             
-            case GLYF_TAG: glyf_start = (u8*)data_start + t->offset; break;
-                
+            case GLYF_TAG:
+            {
+                dir->glyf.data = data_start + t->offset;
+                break;
+            }
+            
             case CMAP_TAG:
             {
-                u8* cmap_data = (u8*)data_start + t->offset;
-                cmap = (Cmap*)arena->push(sizeof(Cmap));
-                cmap->read(arena, (void**)&cmap_data);
-
+                void* cmap_data = data_start + t->offset;
+                eat_cmap(arena, &cmap_data, &dir->cmap);
+    
                 // @Todo: assume 4th format by default for now, support others later.
-                u8* format4_data = (u8*)data_start + t->offset + cmap->subtables[0].offset;
-                format4 = (Format4*)arena->push(sizeof(Format4));
-                format4->read(arena, (void**)&format4_data);
+                void* format_data = data_start + t->offset + dir->cmap.subtables[0].offset;
+
+#if LITTLE_ENDIAN
+                const u16 format_type = *(u16*)format_data;
+                dir->format_type = swap_endianness_16(&format_type);
+#else
+                dir->format_type = *(u16*)format_data;
+#endif
+                
+                if (dir->format_type == 4)
+                {
+                    dir->f4 = push_struct(arena, Format4);
+                    eat_format4(arena, &format_data, dir->f4);
+                }
+                else if (dir->format_type == 12)
+                {
+                    dir->f12 = push_struct(arena, Format12);
+                    eat_format12(arena, &format_data, dir->f12);
+                }
                 
                 break;
             }
         }
     }
 
-    // Then read dependable specific table directories.
-    for (u16 i = 0; i < offset_subtable->num_tables; ++i)
+    // Then read dependable tables.
+    for (u16 i = 0; i < dir->offset_subtable.num_tables; ++i)
     {
-        Table_Directory* t = table_directories + i;
+        Table_Directory* t = dir->table_directories + i;
 
         switch (t->tag)
         {
             case HMTX_TAG:
             {    
-                u8* hmtx_data = (u8*)data_start + t->offset;
-                hmtx = (Hmtx*)arena->push(sizeof(Hmtx));
-                hmtx->read(arena, (void**)&hmtx_data, maxp->num_glyphs, hhea->num_of_long_hor_metrics);
+                void* hmtx_data = data_start + t->offset;
+                eat_hmtx(arena, &hmtx_data, dir->maxp.num_glyphs, dir->hhea.num_of_long_hor_metrics, &dir->hmtx);
                 break;
             }
 
             case LOCA_TAG:
             {
-                u8* loca_data = (u8*)data_start + t->offset;
-                loca = (Loca*)arena->push(sizeof(Loca));
-                loca->read(arena, (void**)&loca_data, maxp->num_glyphs, head->index_to_loc_format);
+                void* loca_data = data_start + t->offset;
+                eat_loca(arena, &loca_data, dir->maxp.num_glyphs, dir->head.index_to_loc_format, &dir->loca);
                 break;
             }
         }
     }
 }
 
-void Font_Directory::print() const
-{
-    msg_log("#)\ttag\tlen\toffset");
-	for(u16 i = 0; i < offset_subtable->num_tables; ++i)
+static void eat_component_glyph(void** data, Component_Glyph* component)
+{    
+    component->flag.val = eat_big_endian_u16(data);
+    component->glyph_index = eat_big_endian_u16(data);
+
+    if (component->flag.arg_1_and_2_are_words)
     {
-		Table_Directory* t = table_directories + i;
-		msg_log("%u)\t%c%c%c%c\t%u\t%u", i + 1,
-		        t->tag_str[3], t->tag_str[2],
-				t->tag_str[1], t->tag_str[0],
-				t->length, t->offset);
-	}
-}
+        component->argument1 = eat_big_endian_s16(data);
+        component->argument2 = eat_big_endian_s16(data);
+    }
+    else
+    {
+        component->argument1 = eat_s8(data);
+        component->argument2 = eat_s8(data);
+    }
 
-Simple_Glyph Font_Directory::simple_glyph_from_char(Arena* arena, u32 character) const
-{
-    const u16 glyph_idx = format4->glyph_index(character);
-    return simple_glyph_from_index(arena, glyph_idx);
-}
-
-Simple_Glyph Font_Directory::simple_glyph_from_index(Arena* arena, u16 glyph_index) const
-{
-    const u32 offset = loca->offsets[glyph_index];
-    u8* glyph_data = glyf_start + offset;
+    component->e = 0.0f;
+    component->f = 0.0f;
     
-    Simple_Glyph glyph;
-    glyph.read(arena, (void**)&glyph_data);
-
-    return glyph;
-}
-
-Compound_Glyph Font_Directory::compound_glyph_from_char(Arena* arena, u32 character) const
-{
-    const u16 glyph_idx = format4->glyph_index(character);
-    const u32 offset = loca->offsets[glyph_idx];
-    u8* glyph_data = glyf_start + offset;
-
-    Compound_Glyph glyph;
-    glyph.read(arena, (void**)&glyph_data, this);
-
-    return glyph;
-}
-
-extern u8* read_entire_file(Arena* arena, const char* path, u32* size);
-
-void Font_Face::read(Arena* arena, void* data)
-{
-    dir = (Font_Directory*)arena->push(sizeof(Font_Directory));
-    dir->read(arena, data);
-
-    glyphs = (Glyph*)arena->push(dir->maxp->num_glyphs * sizeof(Glyph));
-    for (u32 c = 0; c < dir->maxp->num_glyphs; ++c)
+    if (component->flag.args_are_xy_values)
     {
-        const u16 glyph_index = dir->format4->glyph_index(c);
-        u8* glyph_data = dir->glyf_start + dir->loca->offsets[glyph_index];
-        const s16 num_contours = *(s16*)(glyph_data);
+        component->e = (f32)component->argument1;
+        component->f = (f32)component->argument2;
+    }
+    else
+    {
+        // @Todo: handle points.
+        assert(false && "Unhandled entry");
+    }
+    
+    component->a = 1.0f;
+    component->b = 0.0f;
+    component->c = 0.0f;
+    component->d = 1.0f;
 
-        if (num_contours > 0)
-        {
-            read_simple_glyph(arena, c);
-        }
-        else
-        {
-            read_compound_glyph(arena, c);
-        }
+    if (component->flag.we_have_a_scale)
+    {
+        component->a = eat_big_endian_f2dot14(data);
+        component->d = component->a;
+    }
+    else if (component->flag.we_have_an_x_and_y_scale)
+    {
+        component->a = eat_big_endian_f2dot14(data);
+        component->d = eat_big_endian_f2dot14(data);
+    }
+    else if (component->flag.we_have_a_two_by_two)
+    {
+        component->a = eat_big_endian_f2dot14(data);
+        component->b = eat_big_endian_f2dot14(data);
+        component->c = eat_big_endian_f2dot14(data);
+        component->d = eat_big_endian_f2dot14(data);
     }
 }
 
-void Font_Face::read_simple_glyph(Arena* arena, u32 character)
+static void eat_glyph_arrays(Font_Face* face, void* data, u16 countours_num, u16* countours, s16* x_coordinates, s16* y_coordinates)
 {
-    Glyph* glyph = glyphs + character;
-
-    glyph->character = character;
-    glyph->index = dir->format4->glyph_index(character);
-    void* data = dir->glyf_start + dir->loca->offsets[glyph->index];    
-        
-    glyph->header.read(&data);
-    glyph->h_metric = dir->hmtx->h_metrics[glyph - glyphs];
-
-    const u32 contours_length = glyph->header.number_of_countours * sizeof(u16);
-    glyph->end_pts_of_countours = (u16*)arena->push(contours_length);
-    for (s16 i = 0; i < glyph->header.number_of_countours; ++i)
+    for (s16 i = 0; i < countours_num; ++i)
     {
-        glyph->end_pts_of_countours[i] = eat_big_endian_u16(&data);
+        countours[i] = eat_big_endian_u16(&data);
     }
 
     const u16 instruction_length = eat_big_endian_u16(&data); // skip instruction length
     eat(&data, instruction_length); // skip instructions
 
-    const u16 last_idx = glyph->end_pts_of_countours[glyph->header.number_of_countours - 1];
-    const u32 flags_length = last_idx + 1;
-    Glyph_Outline_Flag* flags = (Glyph_Outline_Flag*)arena->push(flags_length);
+    const u16 last_idx = countours[countours_num - 1];
+    auto* flags = (Glyph_Outline_Flag*)alloca(last_idx + 1);
 
     for (u16 i = 0; i <= last_idx; ++i)
     {
@@ -667,8 +410,6 @@ void Font_Face::read_simple_glyph(Arena* arena, u32 character)
         }
     }
 
-    const u32 coordinates_length = (last_idx + 1) * 2;
-    glyph->x_coordinates = (s16*)arena->push(coordinates_length);
     s16 prev_coordinate = 0;
     s16 curr_coordinate = 0;
 
@@ -683,11 +424,10 @@ void Font_Face::read_simple_glyph(Arena* arena, u32 character)
             case 3: curr_coordinate = eat_u8(&data); break;
         }
         
-        glyph->x_coordinates[i] = curr_coordinate + prev_coordinate;
-        prev_coordinate = glyph->x_coordinates[i];
+        x_coordinates[i] = curr_coordinate + prev_coordinate;
+        prev_coordinate = x_coordinates[i];
     }
 
-    glyph->y_coordinates = (s16*)arena->push(coordinates_length);
     prev_coordinate = 0;
     curr_coordinate = 0;
 
@@ -702,70 +442,197 @@ void Font_Face::read_simple_glyph(Arena* arena, u32 character)
             case 3: curr_coordinate = eat_u8(&data); break;
         }
         
-        glyph->y_coordinates[i] = curr_coordinate + prev_coordinate;
-        prev_coordinate = glyph->y_coordinates[i];
+        y_coordinates[i] = curr_coordinate + prev_coordinate;
+        prev_coordinate = y_coordinates[i];
     }
-
-    arena->pop(flags_length);
 }
 
-void Font_Face::read_compound_glyph(Arena* arena, u32 character)
+static inline void* get_glyph_data(Font_Face* face, u16 glyph_index)
 {
-    Glyph* glyph = glyphs + character;
-
-    glyph->character = character;
-    glyph->index = dir->format4->glyph_index(character);
-    void* data = dir->glyf_start + dir->loca->offsets[glyph->index];    
-
-    glyph->header.read(&data);
-    glyph->h_metric = dir->hmtx->h_metrics[glyph - glyphs];
-
-    const u32 def_parts_length = 32 * sizeof(Component_Glyph_Part);
-    Component_Glyph_Part* parts = (Component_Glyph_Part*)arena->push(def_parts_length);
-
-    u16 idx = 0;
-    u32 actual_parts_length = 0;
-    
-    while (true)
-    {
-        Component_Glyph_Part* part = parts + idx;
-        part->read(&data);
-
-        /*
-        Glyph* simple = simple_glyphs + idx;
-        *simple = fd->simple_glyph_from_index(arena, part->glyph_index);
-
-        // Transform all simple glyph coordinates.
-        const u16 last_idx = simple->end_pts_of_countours[simple->header.number_of_countours - 1];
-        for(u16 i = 0; i <= last_idx; ++i)
-        {
-            f32 x = simple->x_coordinates[i];
-            f32 y = simple->y_coordinates[i];
-
-            x = part->a * x + part->c * y + part->e;
-            y = part->b * x + part->d * y + part->f;
-            
-            simple->x_coordinates[i] = (s16)x;
-            simple->y_coordinates[i] = (s16)y;
-        }
-        */
-        
-        idx++;
-        actual_parts_length += sizeof(Component_Glyph_Part);
-        
-        if (!part->flag.more_components)
-            break;
-    }
-
-    // Pop extra memory pushed earlier.
-    ASSERT(actual_parts_length < def_parts_length);
-    arena->pop(def_parts_length - actual_parts_length);
+    return face->dir->glyf.data + face->dir->loca.offsets[glyph_index];
 }
 
-Font_Face* create_font_face(Arena* arena, const char* font_path)
-{
+extern u8* read_entire_file(Arena* arena, const char* path, s32* size_read);
+
+void init_font_face(Arena* arena, const char* font_path, Font_Face* face)
+{ 
     u8* font_data = read_entire_file(arena, font_path, nullptr);
-    Font_Face* face = (Font_Face*)arena->push(sizeof(Font_Face));
-    face->read(arena, font_data);    
-    return face;
+    face->dir = push_struct(arena, Font_Directory);
+    eat_font_directory(arena, font_data, face->dir);
+
+    face->glyph = push_struct(arena, Glyph_Slot);
+
+    const Maxp* maxp = &face->dir->maxp;
+    const u16 max_contours = max(maxp->max_contours, maxp->max_component_contours);
+    face->glyph->end_pts_of_countours = push_array(arena, max_contours, u16);
+
+    const u16 max_points = max(maxp->max_points, maxp->max_component_points);
+    face->glyph->x_coordinates = push_array(arena, max_points * 2, s16);
+    face->glyph->y_coordinates = push_array(arena, max_points * 2, s16);
+}
+
+u16 get_glyph_index(Font_Face* face, u32 character)
+{
+    if (face->dir->format_type == 4)
+        return get_glyph_index(face->dir->f4, character);
+
+    if (face->dir->format_type == 12)
+        return get_glyph_index(face->dir->f12, character);
+
+    printf("Unsupported format type (%u)\n", face->dir->format_type);
+    return 0;
+}
+
+bool load_glyph(Font_Face* face, u16 glyph_index)
+{
+    if (glyph_index == 0)
+    {
+        printf("Invalid glyph index (%u)\n", glyph_index);
+        return false;
+    }
+    
+    void* data = get_glyph_data(face, glyph_index);
+    auto* glyph = face->glyph;
+    
+    glyph->number_of_countours = eat_big_endian_s16(&data);
+    glyph->x_min = eat_big_endian_s16(&data);
+    glyph->y_min = eat_big_endian_s16(&data);
+    glyph->x_max = eat_big_endian_s16(&data);
+    glyph->y_max = eat_big_endian_s16(&data);
+
+    if (glyph->number_of_countours >= 0)
+    {
+        eat_glyph_arrays(face, data, glyph->number_of_countours, glyph->end_pts_of_countours, glyph->x_coordinates, glyph->y_coordinates);
+    }
+    else // @Todo: probably won't work with component depth > 1 ?
+    {
+        s16 total_component_countours = 0;
+        s16 total_component_points = 0;
+        u16* component_contours = nullptr;
+        s16* component_x_coordinates = nullptr;
+        s16* component_y_coordinates = nullptr;
+        
+        while (true)
+        {           
+            Component_Glyph component;
+            eat_component_glyph(&data, &component);
+
+            void* component_data = get_glyph_data(face, component.glyph_index);
+            const s16 component_number_of_countours = eat_big_endian_s16(&component_data);
+            eat(&component_data, 4 * sizeof(u16)); // skip min/max points
+
+            component_contours = glyph->end_pts_of_countours + total_component_countours;
+            component_x_coordinates = glyph->x_coordinates + total_component_points;
+            component_y_coordinates = glyph->y_coordinates + total_component_points;
+            
+            eat_glyph_arrays(face, component_data, component_number_of_countours, component_contours, component_x_coordinates, component_y_coordinates);
+            
+            // Offset countour indices.
+            for (s16 i = 0; i < component_number_of_countours; ++i)
+            {
+                component_contours[i] += total_component_points;
+            }
+            
+            const u16 component_last_idx = component_contours[component_number_of_countours - 1];
+            total_component_countours += component_number_of_countours;
+            total_component_points += component_last_idx + 1;
+            
+            // Transform coordinates.
+            for(u16 i = 0; i <= component_last_idx; ++i)
+            {
+                f32 x = (f32)component_x_coordinates[i];
+                f32 y = (f32)component_y_coordinates[i];
+
+                x = component.a * x + component.c * y + component.e;
+                y = component.b * x + component.d * y + component.f;
+
+                component_x_coordinates[i] = (s16)x;
+                component_y_coordinates[i] = (s16)y;
+            }
+                    
+            if (!component.flag.more_components)
+                break;
+        }
+
+        glyph->number_of_countours = total_component_countours;
+    }
+    
+    return true;
+}
+
+bool load_char(Font_Face* face, u32 character)
+{
+    const u16 idx = get_glyph_index(face, character);
+    return load_glyph(face, idx);
+}
+
+void print_font_firectory(Font_Directory* dir)
+{
+    printf("#)\ttag\tlen\toffset\n");
+	for(u16 i = 0; i < dir->offset_subtable.num_tables; ++i)
+    {
+		Table_Directory* t = dir->table_directories + i;
+		printf("%u)\t%c%c%c%c\t%u\t%u\n", i + 1,
+		        t->tag_str[3], t->tag_str[2],
+				t->tag_str[1], t->tag_str[0],
+				t->length, t->offset);
+	}
+}
+
+void print_cmap(Cmap* cmap)
+{
+	printf("#)\tp_id\tps_id\toffset\ttype\n");
+
+    for (u16 i = 0; i < cmap->number_subtables; ++i)
+    {
+        Cmap_Encoding_Subtable* cet = cmap->subtables + i;
+
+        char* platform_str = (char*)alloca(32);
+        switch (cet->platform_id)
+        {
+            case 0: platform_str = "Unicode"; break;
+            case 1: platform_str = "Mac"; break;
+            case 2: platform_str = "Not Supported"; break;
+            case 3: platform_str = "Microsoft"; break;
+        }
+        
+        printf("%u)\t%u\t%u\t%u\t%s\n", i + 1,
+                cet->platform_id,
+                cet->platform_specific_id,
+                cet->offset,
+                platform_str);
+	}
+}
+
+void print_format4(Format4* f4)
+{
+    const u16 seg_count = f4->seg_count_x2 / 2;
+
+    printf("format: %u, length: %u, language: %u, seg_count: %u\n", f4->format, f4->length, f4->language, seg_count);
+    printf("search_range: %u, entry_celector: %u, range_shift: %u)\n", f4->search_range, f4->entry_selector, f4->range_shift);
+    printf("#)\tstart_code\tend_code\tid_delta\tid_range_offset\n");
+
+	for (u16 i = 0; i < seg_count; ++i)
+    {
+	    printf("%u)\t%10u\t%8u\t%8u\t%15u\n", i + 1,
+                f4->start_code[i],
+                f4->end_code[i],
+                f4->id_delta[i],
+                f4->id_range_offset[i]);
+    }
+}
+
+void print_glyph_data(Glyph_Slot* glyph)
+{
+    printf("#contours\t(x_min, y_min)\t(x_max, y_max)\n");
+	printf("%9d\t(%d,%d)\t\t(%d,%d)\n", glyph->number_of_countours,
+			glyph->x_min, glyph->y_min,
+			glyph->x_max, glyph->y_max);
+
+	printf("#)\t(  x  ,  y  )\n");
+	const u16 last_idx = glyph->end_pts_of_countours[glyph->number_of_countours - 1];
+	for(u16 i = 0; i <= last_idx; ++i)
+    {
+		printf("%d)\t(%5d,%5d)\n", i + 1, glyph->x_coordinates[i], glyph->y_coordinates[i]);
+	}
 }

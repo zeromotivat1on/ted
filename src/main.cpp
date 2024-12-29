@@ -1,35 +1,42 @@
 #include "pch.h"
 #include "font.h"
-#include "file_reader.h"
+#include "arena.h"
+#include <stdio.h>
+#include <malloc.h>
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
-#include <malloc.h>
 
-u8* read_entire_file(Arena* arena, const char* path, u32* size)
+u8* read_entire_file(Arena* arena, const char* path, s32* size_read)
 {
-    file_handle handle = open_file(path, FILE_OPEN_EXISTING, FILE_ACCESS_READ);
-    if (handle == INVALID_FILE_HANDLE)
+    if (FILE* file = fopen(path, "rb"))
     {
-        close_file(handle);
-        return nullptr;
-    }
-    
-    const u32 handle_size = (u32)file_size(handle);    
-    if (size)
-        *size = handle_size;
+        fseek(file, 0, SEEK_END);
+        const s32 size = ftell(file);
+        fseek(file, 0, SEEK_SET);
 
-    u64 bytes_read = 0;
-    u8* buffer = (u8*)arena->push(handle_size);
-    read_file_sync(handle, buffer, handle_size, &bytes_read);
-    ASSERT(bytes_read == handle_size);
-    
-    close_file(handle);
-    return buffer;
+        if (size_read)
+            *size_read = size;
+
+        u8* file_data = push(arena, size);
+        const u64 read_amount = fread(file_data, size, 1, file);
+        file_data[size] = '\0';
+
+        if (read_amount)
+        {
+            fclose(file);
+            return file_data;
+        }
+        
+        pop(arena, size);
+        fclose(file);
+    }
+
+    return nullptr;
 }
 
 void char_callback(GLFWwindow* win, u32 character)
 {
-    msg_log("Window char (%c)", character);
+    printf("Window char (%c)\n", character);
 }
 
 void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
@@ -39,7 +46,7 @@ void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
 
 int main()
 {
-#if 1
+#if 0
     const char* font_path = "C:/Users/admin/Downloads/Envy_Code_R_PR7/Envy_Code_R.ttf";
 #else
     const char* font_path = "C:/Users/admin/Downloads/consola.ttf";
@@ -47,34 +54,22 @@ int main()
     
     constexpr u64 k_app_arena_size = MB(4);
     Arena app_arena = create_arena(malloc(k_app_arena_size), k_app_arena_size);
-    Arena font_arena = app_arena.subarena(MB(1));
+    Arena font_arena = subarena(&app_arena, MB(1));
 
-#if 0
-    u8* font_data = read_entire_file(&font_arena, font_path, nullptr);
-
-    Font_Directory fd;
-    fd.read(&font_arena, font_data);
-
-    const u16 units_per_em = fd.head->units_per_em;
-    const u16 num_glyphs = fd.maxp->num_glyphs;
-
-    msg_log("Font num_of_long_hor_metrics (%d)", fd.hhea->num_of_long_hor_metrics);
+    Font_Face font_face;
+    init_font_face(&font_arena, font_path, &font_face);
     
-    //fd.cmap->print();
-    //fd.format4->print();
+    const u16 units_per_em = font_face.dir->head.units_per_em;
+    const u16 num_glyphs = font_face.dir->maxp.num_glyphs;
+    printf("Font units_per_em (%u) num_glyphs (%u)\n", units_per_em, num_glyphs);
 
-    Simple_Glyph sg = fd.simple_glyph_from_char(&font_arena, 'A');
-    sg.print();
-#else
-    Font_Face* font_face = create_font_face(&font_arena, font_path);
-    const u16 units_per_em = font_face->dir->head->units_per_em;
-    const u16 num_glyphs = font_face->dir->maxp->num_glyphs;
+    print_font_firectory(font_face.dir);
+    print_cmap(&font_face.dir->cmap);
+    print_format4(font_face.dir->f4);
     
-    Glyph sg = font_face->glyphs['A'];
-#endif
-
-    msg_log("Font units_per_em (%u)", units_per_em);
-    msg_log("Font num_glyphs (%u)", num_glyphs);
+    const bool loaded = load_char(&font_face, 'A');
+    assert(loaded);
+    print_glyph_data(font_face.glyph);
     
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -84,7 +79,7 @@ int main()
     GLFWwindow* window = glfwCreateWindow(800, 600, "ted", NULL, NULL);
     if (!window)
     {
-        msg_critical("Failed to create GLFW window");
+        printf("Failed to create GLFW window\n");
         glfwTerminate();
         return -1;
     }
@@ -96,7 +91,7 @@ int main()
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
-        msg_critical("Failed to initialize GLAD");
+        printf("Failed to initialize GLAD\n");
         return -1;
     }
 
@@ -117,7 +112,7 @@ int main()
 
     if (!success)
     {
-        msg_critical("Failed to compile vertex shader");
+        printf("Failed to compile vertex shader\n");
         return -1;
     }
 
@@ -138,7 +133,7 @@ int main()
 
     if (!success)
     {
-        msg_critical("Failed to compile fragment shader");
+        printf("Failed to compile fragment shader\n");
         return -1;
     }
 
@@ -152,37 +147,35 @@ int main()
 
     if (!success)
     {
-        msg_critical("Failed to link shader program");
+        printf("Failed to link shader program\n");
         return -1;
     }
 
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 
-#if 1
-    const u16 font_size = 16;
-    const u16 vertex_count = 3 * (sg.end_pts_of_countours[sg.header.number_of_countours - 1] + 1);
-    f32* vertices = (f32*)malloc(vertex_count * sizeof(f32));
+    const u16 font_size = 32;
+    const u16 vertex_count = 3 * (font_face.glyph->end_pts_of_countours[font_face.glyph->number_of_countours - 1] + 1);
+    f32* vertices = (f32*)alloca(vertex_count * sizeof(f32));
     for(u16 i = 0; i < vertex_count; i += 3)
     {
         const f32 scale = (f32)font_size / (f32)units_per_em;
-        const f32 x_scaled = (f32)sg.x_coordinates[i] * scale;
-        const f32 y_scaled = (f32)sg.y_coordinates[i] * scale;
+        const f32 x_scaled = (f32)font_face.glyph->x_coordinates[i] * scale;
+        const f32 y_scaled = (f32)font_face.glyph->y_coordinates[i] * scale;
         
         vertices[i + 0] = 2.0f * x_scaled / 800.0f - 1.0f;
         vertices[i + 1] = 1.0f - 2.0f * y_scaled / 600.0f;
         vertices[i + 2] = 0.0f;
 	}
-#else
-    const f32 vertices[] = {
+
+    const f32 triangle_vertices[] = {
         0.5f,  0.5f, 0.0f,  // top right
         0.5f, -0.5f, 0.0f,  // bottom right
         -0.5f, -0.5f, 0.0f, // bottom left
         -0.5f,  0.5f, 0.0f  // top left 
     };
-#endif
     
-    const u32 indices[] = {
+    const u32 triangle_indices[] = {
         0, 1, 3, // first triangle
         1, 2, 3  // second triangle
     };  

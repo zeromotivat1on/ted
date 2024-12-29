@@ -1,7 +1,7 @@
 add_executable(ted
-                file_reader.h font.h memory_eater.h
-                main.cpp file_reader.cpp font.cpp)
-                
+                font.h memory_eater.h arena.h
+                main.cpp font.cpp)
+
 target_precompile_headers(ted PUBLIC pch.h)
 target_include_directories(ted PRIVATE "${PROJECT_SOURCE_DIR}/src")
 

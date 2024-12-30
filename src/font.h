@@ -129,8 +129,6 @@ struct Cmap
     u16 version;
     u16 number_subtables;
     Cmap_Encoding_Subtable* subtables;
-
-    void print() const;
 };
 
 struct Format4
@@ -251,6 +249,21 @@ struct Glyph_Slot
     s16* x_coordinates;
     s16* y_coordinates;
 };
+
+inline s16 get_glyph_width(const Glyph_Slot* glyph)
+{
+    return glyph->x_max - glyph->x_min;
+}
+
+inline s16 get_glyph_height(const Glyph_Slot* glyph)
+{
+    return glyph->y_max - glyph->y_min;
+}
+
+inline u16 get_point_count(const Glyph_Slot* glyph)
+{
+    return glyph->end_pts_of_countours[glyph->number_of_countours - 1] + 1;
+}
 
 struct Font_Face
 {

@@ -265,7 +265,7 @@ u16 get_glyph_index(Font_Face* face, u32 character);
 bool load_glyph(Font_Face* face, u16 glyph_index);
 bool load_char(Font_Face* face, u32 character);
 
-void print_font_firectory(Font_Directory* dir);
+void print_font_directory(Font_Directory* dir);
 void print_cmap(Cmap* cmap);
 void print_format4(Format4* f4);
 void print_glyph_data(Glyph_Slot* glyph);

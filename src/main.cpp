@@ -63,7 +63,7 @@ int main()
     const u16 num_glyphs = font_face.dir->maxp.num_glyphs;
     printf("Font units_per_em (%u) num_glyphs (%u)\n", units_per_em, num_glyphs);
 
-    print_font_firectory(font_face.dir);
+    print_font_directory(font_face.dir);
     print_cmap(&font_face.dir->cmap);
     print_format4(font_face.dir->f4);
     

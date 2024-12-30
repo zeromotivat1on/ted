@@ -566,7 +566,7 @@ bool load_char(Font_Face* face, u32 character)
     return load_glyph(face, idx);
 }
 
-void print_font_firectory(Font_Directory* dir)
+void print_font_directory(Font_Directory* dir)
 {
     printf("#)\ttag\tlen\toffset\n");
 	for(u16 i = 0; i < dir->offset_subtable.num_tables; ++i)

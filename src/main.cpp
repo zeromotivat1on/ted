@@ -68,9 +68,7 @@ int main()
     print_cmap(&font_face.dir->cmap);
     print_format4(font_face.dir->f4);
     
-    //const bool loaded = load_glyph(&font_face, 326);
-    const bool loaded = load_char(&font_face, 732); // 732 - small tilde
-    //const bool loaded = load_char(&font_face, 126); // 126 - tilde
+    const bool loaded = load_char(&font_face, 'A');
     assert(loaded);
     print_glyph_data(font_face.glyph);
     

@@ -35,7 +35,7 @@ u8* read_entire_file(Arena* arena, const char* path, s32* size_read)
     return nullptr;
 }
 
-void draw_glyph(Glyph_Slot* glyph, u32 program, u32 vao)
+void draw_glyph(Glyph_Slot* glyph, u32 program, u32 vao, s32 draw_mode)
 {
     glUseProgram(program);
     glBindVertexArray(vao);
@@ -43,14 +43,14 @@ void draw_glyph(Glyph_Slot* glyph, u32 program, u32 vao)
     u16 start_idx = 0;
     u16 count = glyph->end_pts_of_countours[0] + 1;
 
-    glDrawArrays(GL_LINE_LOOP, start_idx, count);
+    glDrawArrays(draw_mode, start_idx, count);
     start_idx += count;
     
     for (s16 i = 1; i < glyph->number_of_countours; ++i)
     {
         // @Todo: not sure if this will be correct for all glyphs.
         count = glyph->end_pts_of_countours[i] - glyph->end_pts_of_countours[i - 1];
-        glDrawArrays(GL_LINE_LOOP, start_idx, count);
+        glDrawArrays(draw_mode, start_idx, count);
         start_idx += count;
     }
 }
@@ -221,16 +221,26 @@ int main()
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
-    
+
+    s32 glyph_draw_mode = GL_LINE_LOOP;
     while (!glfwWindowShouldClose(window))
     {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
-        
+
+        if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+            glyph_draw_mode = GL_LINE_LOOP;
+
+        if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
+            glyph_draw_mode = GL_POINTS;
+
+        if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS)
+            glyph_draw_mode = GL_TRIANGLES;
+                
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        draw_glyph(font_face.glyph, shader_program, vao);
+        draw_glyph(font_face.glyph, shader_program, vao, glyph_draw_mode);
         //glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);

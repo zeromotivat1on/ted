@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "font.h"
 #include "arena.h"
+#include "matrix.h"
 #include <stdio.h>
 #include <malloc.h>
 #include <glad/glad.h>
@@ -67,7 +68,9 @@ int main()
     print_cmap(&font_face.dir->cmap);
     print_format4(font_face.dir->f4);
     
-    const bool loaded = load_char(&font_face, 'A');
+    //const bool loaded = load_glyph(&font_face, 326);
+    const bool loaded = load_char(&font_face, 732); // 732 - small tilde
+    //const bool loaded = load_char(&font_face, 126); // 126 - tilde
     assert(loaded);
     print_glyph_data(font_face.glyph);
     
@@ -76,7 +79,9 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "ted", NULL, NULL);
+    constexpr s32 k_window_width = 800;
+    constexpr s32 k_window_height = 600;
+    GLFWwindow* window = glfwCreateWindow(k_window_width, k_window_height, "ted", NULL, NULL);
     if (!window)
     {
         printf("Failed to create GLFW window\n");
@@ -98,9 +103,10 @@ int main()
     const char* vertex_shader_src =
         "#version 460 core\n"
         "layout (location = 0) in vec3 vpos;\n"
+        "uniform mat4 projection;\n"
         "void main()\n"
         "{\n"
-        "    gl_Position = vec4(vpos.x, vpos.y, vpos.z, 1.0f);\n"
+        "    gl_Position = projection * vec4(vpos.xyz, 1.0f);\n"
         "}\0";
     
     u32 vertex_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -154,40 +160,38 @@ int main()
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 
+    mat4 projection = ortho(0.0f, k_window_width, 0.0f, k_window_height, -1.0f, 1.0f);
+    glUseProgram(shader_program);
+    glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, (f32*)projection.rows);
+
     const u16 font_size = 32;
-    const u16 vertex_count = 3 * (font_face.glyph->end_pts_of_countours[font_face.glyph->number_of_countours - 1] + 1);
-    f32* vertices = (f32*)alloca(vertex_count * sizeof(f32));
-    for(u16 i = 0; i < vertex_count; i += 3)
+    const u16 vertex_count = (font_face.glyph->end_pts_of_countours[font_face.glyph->number_of_countours - 1] + 1);
+    f32* vertices = (f32*)alloca(vertex_count * 3 * sizeof(f32));
+    for (u16 i = 0, coord_idx = 0; i < vertex_count * 3; i += 3, ++coord_idx)
     {
+#if 0
         const f32 scale = (f32)font_size / (f32)units_per_em;
         const f32 x_scaled = (f32)font_face.glyph->x_coordinates[i] * scale;
         const f32 y_scaled = (f32)font_face.glyph->y_coordinates[i] * scale;
-        
-        vertices[i + 0] = 2.0f * x_scaled / 800.0f - 1.0f;
-        vertices[i + 1] = 1.0f - 2.0f * y_scaled / 600.0f;
-        vertices[i + 2] = 0.0f;
-	}
 
-    const f32 triangle_vertices[] = {
-        0.5f,  0.5f, 0.0f,  // top right
-        0.5f, -0.5f, 0.0f,  // bottom right
-        -0.5f, -0.5f, 0.0f, // bottom left
-        -0.5f,  0.5f, 0.0f  // top left 
-    };
+        vertices[i + 0] = 2.0f * x_scaled / k_window_width - 1.0f;
+        vertices[i + 1] = 1.0f - 2.0f * y_scaled / k_window_height;
+        vertices[i + 2] = 0.0f;
+#else
+        vertices[i + 0] = (f32)font_face.glyph->x_coordinates[coord_idx] / 10 + k_window_width / 2;
+        vertices[i + 1] = (f32)font_face.glyph->y_coordinates[coord_idx] / 10 + k_window_height / 2;
+        vertices[i + 2] = 0.0f;
+#endif
+	}
     
-    const u32 triangle_indices[] = {
-        0, 1, 3, // first triangle
-        1, 2, 3  // second triangle
-    };  
-            
     u32 vbo, ibo, vao;
     glGenBuffers(1, &vbo);
     //glGenBuffers(1, &ibo);
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
-    
+
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertex_count, vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertex_count * 3 * sizeof(f32), vertices, GL_STATIC_DRAW);
 
     //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     //glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);    
@@ -209,8 +213,8 @@ int main()
         glUseProgram(shader_program);
         glBindVertexArray(vao);
         glDrawArrays(GL_POINTS, 0, vertex_count);
-        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        
+        //glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }

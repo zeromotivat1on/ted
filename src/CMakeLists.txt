@@ -1,5 +1,5 @@
 add_executable(ted
-                font.h memory_eater.h arena.h
+                arena.h font.h matrix.h memory_eater.h
                 main.cpp font.cpp)
 
 target_precompile_headers(ted PUBLIC pch.h)

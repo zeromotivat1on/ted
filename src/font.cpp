@@ -170,8 +170,9 @@ static inline void eat_format4(Arena* arena, void** data, Format4* f4)
 
 static u16 get_glyph_index(Format4* f4, u32 character)
 {
+    assert(f4->format == 4);
+    
     const u16 seg_count = f4->seg_count_x2 / 2;
-
     s32 code_idx = -1;
 	for (u16 i = 0; i < seg_count; i++)
     {
@@ -226,6 +227,7 @@ static inline void eat_format12(Arena* arena, void** data, Format12* f12)
 
 static u16 get_glyph_index(Format12* f12, u32 character)
 {
+    assert(f12->format == 12);
     return 0;
 }
 
@@ -281,8 +283,7 @@ static inline void eat_font_directory(Arena* arena, void* data, Font_Directory* 
                 void* format_data = data_start + t->offset + dir->cmap.subtables[0].offset;
 
 #if LITTLE_ENDIAN
-                const u16 format_type = *(u16*)format_data;
-                dir->format_type = swap_endianness_16(&format_type);
+                dir->format_type = swap_endianness_16(format_data);
 #else
                 dir->format_type = *(u16*)format_data;
 #endif

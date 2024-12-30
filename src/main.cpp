@@ -108,6 +108,7 @@ int main()
     }
     
     glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
 
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCharCallback(window, char_callback);
@@ -222,7 +223,10 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
+    f32 dt = 0.0f;
+    f32 frame_time = glfwGetTime();
     s32 glyph_draw_mode = GL_LINE_LOOP;
+    
     while (!glfwWindowShouldClose(window))
     {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -245,6 +249,12 @@ int main()
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        const f32 time = glfwGetTime();
+        dt = time - frame_time;
+        frame_time = time;
+        
+        printf("dt (%.6fs)\n", dt);
     }
 
     glDeleteVertexArrays(1, &vao);

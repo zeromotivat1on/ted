@@ -35,7 +35,7 @@ u8* read_entire_file(Arena* arena, const char* path, s32* size_read)
     return nullptr;
 }
 
-void draw_glyph(Glyph_Slot* glyph, u32 program, u32 vao, f32 coord_scale = 1.0f, f32 coord_offset = 0.0f)
+void draw_glyph(Glyph_Slot* glyph, u32 program, u32 vao)
 {
     glUseProgram(program);
     glBindVertexArray(vao);
@@ -230,7 +230,7 @@ int main()
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        draw_glyph(font_face.glyph, shader_program, vao, 0.1f, 100.0f);
+        draw_glyph(font_face.glyph, shader_program, vao);
         //glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);

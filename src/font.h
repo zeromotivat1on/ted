@@ -250,12 +250,12 @@ struct Glyph_Slot
     s16* y_coordinates;
 };
 
-inline s16 get_glyph_width(const Glyph_Slot* glyph)
+inline s16 get_width(const Glyph_Slot* glyph)
 {
     return glyph->x_max - glyph->x_min;
 }
 
-inline s16 get_glyph_height(const Glyph_Slot* glyph)
+inline s16 get_height(const Glyph_Slot* glyph)
 {
     return glyph->y_max - glyph->y_min;
 }

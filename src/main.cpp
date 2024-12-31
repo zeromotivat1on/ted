@@ -88,7 +88,7 @@ int main()
     print_cmap(&font_face.dir->cmap);
     print_format4(font_face.dir->f4);
     
-    const bool loaded = load_char(&font_face, 'A');
+    const bool loaded = load_char(&font_face, 's');
     assert(loaded);
     print_glyph_data(font_face.glyph);
     
@@ -183,26 +183,23 @@ int main()
     glUseProgram(shader_program);
     glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, (f32*)projection.rows);
 
-    const u16 font_size = 32;
+    const u16 font_size = 256;
+    const f32 font_scale = (f32)font_size / (f32)units_per_em;
     const u16 point_count = get_point_count(font_face.glyph);
+    printf("font scale (%.4f)\n", font_scale);
+    
     f32* vertices = (f32*)alloca(point_count * 3 * sizeof(f32));
     for (u16 i = 0, coord_idx = 0; i < point_count * 3; i += 3, ++coord_idx)
     {
-#if 0
-        const f32 scale = (f32)font_size / (f32)units_per_em;
-        const f32 x_scaled = (f32)font_face.glyph->x_coordinates[i] * scale;
-        const f32 y_scaled = (f32)font_face.glyph->y_coordinates[i] * scale;
-
-        vertices[i + 0] = 2.0f * x_scaled / k_window_width - 1.0f;
-        vertices[i + 1] = 1.0f - 2.0f * y_scaled / k_window_height;
-        vertices[i + 2] = 0.0f;
-#else
-        const u16 div_scale = 10;
+        const f32 x_scaled = (f32)font_face.glyph->x_coordinates[coord_idx] * font_scale;
+        const f32 y_scaled = (f32)font_face.glyph->y_coordinates[coord_idx] * font_scale;
         
-        vertices[i + 0] = (f32)font_face.glyph->x_coordinates[coord_idx] / div_scale + k_window_width / 2 - get_glyph_width(font_face.glyph) / div_scale / 2;
-        vertices[i + 1] = (f32)font_face.glyph->y_coordinates[coord_idx] / div_scale + k_window_height / 2 - get_glyph_height(font_face.glyph) / div_scale / 2;
+        const f32 w_half = get_width(font_face.glyph) * font_scale * 0.5f;
+        const f32 h_half = get_height(font_face.glyph) * font_scale * 0.5f;
+        
+        vertices[i + 0] = x_scaled + k_window_width / 2 - w_half;
+        vertices[i + 1] = y_scaled + k_window_height / 2 - h_half;
         vertices[i + 2] = 0.0f;
-#endif
 	}
     
     u32 vbo, ibo, vao;
@@ -224,7 +221,7 @@ int main()
     glBindVertexArray(0);
 
     f32 dt = 0.0f;
-    f32 frame_time = glfwGetTime();
+    f32 frame_time = (f32)glfwGetTime();
     s32 glyph_draw_mode = GL_LINE_LOOP;
     
     while (!glfwWindowShouldClose(window))
@@ -250,11 +247,11 @@ int main()
         glfwSwapBuffers(window);
         glfwPollEvents();
 
-        const f32 time = glfwGetTime();
+        const f32 time = (f32)glfwGetTime();
         dt = time - frame_time;
         frame_time = time;
         
-        printf("dt (%.6fs)\n", dt);
+        //printf("dt (%.6fs)\n", dt);
     }
 
     glDeleteVertexArrays(1, &vao);

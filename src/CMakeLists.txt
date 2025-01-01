@@ -15,4 +15,6 @@ target_compile_definitions(ted PRIVATE
                                $<$<PLATFORM_ID:Windows>:WIN32>
                                # Configuration
                                $<$<CONFIG:Debug>:BUILD_DEBUG>
-                               $<$<CONFIG:Release>:BUILD_RELEASE>)
+                               $<$<CONFIG:Release>:BUILD_RELEASE>
+                               # Directories
+                               DIR_SHADERS="${CMAKE_SOURCE_DIR}/shaders/")

@@ -18,7 +18,7 @@ u8* read_entire_file(Arena* arena, const char* path, s32* size_read)
         if (size_read)
             *size_read = size;
 
-        u8* file_data = push(arena, size);
+        u8* file_data = push(arena, size + 1);
         const u64 read_amount = fread(file_data, size, 1, file);
         file_data[size] = '\0';
 
@@ -85,37 +85,41 @@ void gl_transform_glyph(GL_Glyph* glyph, f32 scale, f32 x_translate, f32 y_trans
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-u32 gl_create_program(const char* vertex_shader_src, const char* fragment_shader_src)
+u32 gl_create_program(const char* vs_src, const char* fs_src)
 {
-    u32 vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex_shader, 1, &vertex_shader_src, NULL);
-    glCompileShader(vertex_shader);
+    static char info_log[1024];
+    
+    u32 vs = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vs, 1, &vs_src, NULL);
+    glCompileShader(vs);
 
     s32 success;
-    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(vs, GL_COMPILE_STATUS, &success);
 
     if (!success)
     {
-        printf("Failed to compile vertex shader\n");
+        glGetShaderInfoLog(vs, 1024, nullptr, info_log);
+        printf("Failed to compile vertex shader: %s\n", info_log);
         return -1;
     }
     
-    u32 fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment_shader, 1, &fragment_shader_src, NULL);
-    glCompileShader(fragment_shader);
+    u32 fs = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fs, 1, &fs_src, NULL);
+    glCompileShader(fs);
 
     success;
-    glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(fs, GL_COMPILE_STATUS, &success);
 
     if (!success)
     {
-        printf("Failed to compile fragment shader\n");
+        glGetShaderInfoLog(fs, 1024, nullptr, info_log);
+        printf("Failed to compile fragment shader: %s\n", info_log);
         return -1;
     }
 
     u32 shader_program = glCreateProgram();
-    glAttachShader(shader_program, vertex_shader);
-    glAttachShader(shader_program, fragment_shader);
+    glAttachShader(shader_program, vs);
+    glAttachShader(shader_program, fs);
     glLinkProgram(shader_program);
 
     success;
@@ -127,10 +131,26 @@ u32 gl_create_program(const char* vertex_shader_src, const char* fragment_shader
         return -1;
     }
 
-    glDeleteShader(vertex_shader);
-    glDeleteShader(fragment_shader);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
 
     return shader_program;
+}
+
+u32 gl_load_program(Arena* arena, const char* vs_path, const char* fs_path)
+{
+    s32 vs_size = 0;
+    const char* vs_src = (char*)read_entire_file(arena, vs_path, &vs_size);
+    
+    s32 fs_size = 0;
+    const char* fs_src = (char*)read_entire_file(arena, fs_path, &fs_size);
+
+    const u32 program = gl_create_program(vs_src, fs_src);
+
+    pop(arena, fs_size);
+    pop(arena, vs_size);
+
+    return program;
 }
 
 void draw_glyph(Glyph_Slot* glyph, u32 program, u32 vao, s32 draw_mode)
@@ -180,7 +200,7 @@ int main()
     
     const u16 units_per_em = font_face.dir->head.units_per_em;
     const u16 num_glyphs = font_face.dir->maxp.num_glyphs;
-    printf("Font units_per_em (%u) num_glyphs (%u)\n", units_per_em, num_glyphs);
+    printf("units_per_em (%u) num_glyphs (%u)\n", units_per_em, num_glyphs);
 
     print_font_directory(font_face.dir);
     print_cmap(&font_face.dir->cmap);
@@ -217,28 +237,13 @@ int main()
         return -1;
     }
 
-    const char* vertex_shader_src =
-        "#version 460 core\n"
-        "layout (location = 0) in vec2 vpos;\n"
-        "uniform mat4 projection;\n"
-        "void main()\n"
-        "{\n"
-        "    gl_Position = projection * vec4(vpos.xy, 0.0f, 1.0f);\n"
-        "}\0";
+    const char* vs_path = DIR_SHADERS "font.vs";
+    const char* fs_path = DIR_SHADERS "font.fs";
+    const u32 font_program = gl_load_program(&app_arena, vs_path, fs_path);
     
-    const char* fragment_shader_src =
-        "#version 460 core\n"
-        "out vec4 ocolor;\n"
-        "void main()\n"
-        "{\n"
-        "    ocolor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-        "}\0";
-    
-    const u32 shader_program = gl_create_program(vertex_shader_src, fragment_shader_src);
-
     mat4 projection = ortho(0.0f, k_window_width, 0.0f, k_window_height, -1.0f, 1.0f);
-    glUseProgram(shader_program);
-    glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, (f32*)projection.rows);
+    glUseProgram(font_program);
+    glUniformMatrix4fv(glGetUniformLocation(font_program, "projection"), 1, GL_FALSE, (f32*)projection.rows);
 
     const u16 font_size = 128;
     const f32 font_scale = (f32)font_size / (f32)units_per_em;
@@ -247,7 +252,7 @@ int main()
     const f32 glyph_half_h = get_height(font_face.glyph) * font_scale * 0.5f;
     
     GL_Glyph glyph;
-    gl_init_glyph(&app_arena, shader_program, font_face.glyph, &glyph);
+    gl_init_glyph(&app_arena, font_program, font_face.glyph, &glyph);
     gl_transform_glyph(&glyph, font_scale, k_window_width / 2 - glyph_half_w, k_window_height / 2 - glyph_half_h);
     
     f32 dt = 0.0f;
@@ -284,10 +289,10 @@ int main()
         //printf("dt (%.6fs)\n", dt);
     }
 
-    //glDeleteVertexArrays(1, &vao);
-    //glDeleteBuffers(1, &vbo);
+    glDeleteVertexArrays(1, &glyph.vao);
+    glDeleteBuffers(1, &glyph.vbo);
     //glDeleteBuffers(1, &ibo);
-    //glDeleteProgram(shader_program);
+    glDeleteProgram(font_program);
     
     glfwTerminate();
 

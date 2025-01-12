@@ -84,10 +84,17 @@ GL_Text_Render_Context* gl_create_text_render_context(Arena* arena, const Font* 
     
     glBindVertexArray(ctx->vao);
     glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
+
+    f32 vertices[4 * 2] = {
+        0.0f, 1.0f,
+        0.0f, 0.0f,
+        1.0f, 1.0f,
+        1.0f, 0.0f,
+    };
     
-    glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(f32), null, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(f32), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*)0);
     
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -97,6 +104,9 @@ GL_Text_Render_Context* gl_create_text_render_context(Arena* arena, const Font* 
 
     ctx->u_projection.name = "u_projection";
     ctx->u_projection.val = mat4_ortho(0.0f, (f32)window_w, 0.0f, (f32)window_h, -1.0f, 1.0f);
+
+    ctx->u_transform.name = "u_transform";
+    ctx->u_transform.val = mat4{0};
 
     ctx->u_text_color.name = "u_text_color";
     ctx->u_text_color.val = vec3{1.0f, 1.0f, 1.0f};
@@ -155,17 +165,18 @@ void gl_update_glyph_bitmaps(const Font* font, GL_Glyph_Cache* cache, s16 font_s
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }
 
-void gl_render_text(const GL_Text_Render_Context* ctx, vec2 pos, const char* text)
+void gl_render_text(GL_Text_Render_Context* ctx, vec2 pos, const char* text)
 {
     glUseProgram(ctx->program);
     glBindVertexArray(ctx->vao);
-
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
+ 
     const vec3 color = ctx->u_text_color.val;
     glUniform3f(glGetUniformLocation(ctx->program, ctx->u_text_color.name), color.r, color.g, color.b);
     glUniformMatrix4fv(glGetUniformLocation(ctx->program, ctx->u_projection.name), 1, GL_FALSE, (f32*)&ctx->u_projection.val);
         
     glActiveTexture(GL_TEXTURE0);
-
+    
     const char* c = text;
     while (*c != '\0')
     {
@@ -184,29 +195,20 @@ void gl_render_text(const GL_Text_Render_Context* ctx, vec2 pos, const char* tex
         
         const f32 x = pos.x + glyph->offset_x_px;
         const f32 y = pos.y - (glyph->height_px + glyph->offset_y_px);
-
         const f32 w = (f32)glyph->width_px;
         const f32 h = (f32)glyph->height_px;
-
-        const f32 vertices[6][4] = {
-            { x,     y + h, 0.0f, 0.0f },            
-            { x,     y,     0.0f, 1.0f },
-            { x + w, y,     1.0f, 1.0f },
-
-            { x,     y + h, 0.0f, 0.0f },
-            { x + w, y,     1.0f, 1.0f },
-            { x + w, y + h, 1.0f, 0.0f },
-        };
-
+        
+        ctx->u_transform.val = mat4_identity();
+        translate(&ctx->u_transform.val, vec3{x, y, 0.0f});
+        scale(&ctx->u_transform.val, vec3{w, h, 0.0f});
+        glUniformMatrix4fv(glGetUniformLocation(ctx->program, ctx->u_transform.name), 1, GL_FALSE, (f32*)&ctx->u_transform.val);
+        
         glBindTexture(GL_TEXTURE_2D, glyph->texture);
-            
-        glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, 1);
 
         pos.x += glyph->advance_width_px;
         c++;
     }
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }

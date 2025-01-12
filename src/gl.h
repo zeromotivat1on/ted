@@ -57,6 +57,7 @@ struct GL_Text_Render_Context
 {
     GL_Glyph_Cache* glyph_cache;
     GL_Uniform_Mat4 u_projection;
+    GL_Uniform_Mat4 u_transform;
     GL_Uniform_Vec3 u_text_color;
     u32 program;
     u32 vao;
@@ -66,4 +67,4 @@ struct GL_Text_Render_Context
 GL_Text_Render_Context* gl_create_text_render_context(Arena* arena, const Font* font, u32 start_code, u32 end_code, u16 font_size, s32 window_w, s32 window_h);
 GL_Glyph_Cache* gl_cache_glyph_bitmaps(Arena* arena, const Font* font, u32 start_code, u32 end_code, s16 font_size);
 void gl_update_glyph_bitmaps(const Font* font, GL_Glyph_Cache* cache, s16 font_size);
-void gl_render_text(const GL_Text_Render_Context* ctx, vec2 pos, const char* text);
+void gl_render_text(GL_Text_Render_Context* ctx, vec2 pos, const char* text);

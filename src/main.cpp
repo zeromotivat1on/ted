@@ -8,52 +8,61 @@
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
 
-const char* lorem = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.\nAt vero eos et accusam et justo duo dolores et ea rebum.\nStet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.";
-
-mat4 projection = mat4_ortho(0.0f, 1920.0f, 0.0f, 1080.0f, -1.0f, 1.0f);
-Font consola;
+Arena heap_arena;
 s16 font_size = 20;
-GL_Text_Render_Context* ascii_render_ctx = null;
+Font* consola = null;
+Font_Atlas* consola_ascii_atlas = null;
+Font_Render_Context* consola_ascii_render_ctx = null;
 
+// @Todo: remake display_str to be actual text editor compatible structure.
 s32 pointer_pos = 0;
-char display_str[512];
+u32 display_str[512];
 
 void char_callback(GLFWwindow* win, u32 character)
 {
-    //printf("Window char (%c)\n", character);
+    //printf("Window char (%c) as u32 (%u)\n", character, character);
     
     if (character == '+')
     {
         font_size += 2;
         if (font_size > 256) font_size = 256;
-        else gl_update_glyph_bitmaps(&consola, ascii_render_ctx->glyph_cache, font_size);
+        else rescale_font_atlas(&heap_arena, consola, consola_ascii_atlas, font_size);
     }
     else if (character == '-')
     {
         font_size -= 2;
         if (font_size <= 0) font_size = 2;
-        else gl_update_glyph_bitmaps(&consola, ascii_render_ctx->glyph_cache, font_size);
+        else rescale_font_atlas(&heap_arena, consola, consola_ascii_atlas, font_size);
     }
-    
-    display_str[pointer_pos++] = (char)character;
-    display_str[pointer_pos] = '\0';   
+
+    display_str[pointer_pos++] = character;
+    if (pointer_pos >= sizeof(display_str)) pointer_pos = 0;
+    //display_str[pointer_pos] = '\0';   
 }
 
 void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods)
 {
     //printf("Window key (%d) as char (%c)\n", key, (u32)key);
-    
-    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS)
+
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+  
+    if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
-          display_str[pointer_pos++] = '\n';
-          display_str[pointer_pos] = '\0';
+        display_str[pointer_pos++] = '\n';
+        if (pointer_pos >= sizeof(display_str)) pointer_pos = 0;
+    }
+
+    if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        display_str[--pointer_pos] = ' ';
+        if (pointer_pos < 0) pointer_pos = 0;
     }
 }
 
 void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
 {
-    projection = mat4_ortho(0.0f, (f32)width, 0.0f, (f32)height, -1.0f, 1.0f);
-    ascii_render_ctx->u_projection.val = projection;
+    on_window_resize(consola_ascii_render_ctx, width, height);
     glViewport(0, 0, width, height);
 }
 
@@ -62,16 +71,16 @@ int main()
     void* vm_base_addr = vm_base_addr_val;
     void* vm_core = vm_reserve(vm_base_addr, GB(1));
 
-    constexpr u32 heap_size = MB(64);
+    constexpr u32 heap_size = MB(16);
     void* heap = vm_commit(vm_core, heap_size);
-    Arena heap_arena = create_arena(heap, heap_size);
+    heap_arena = create_arena(heap, heap_size);
 
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(1920, 1080, "ted", null, null);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "ted", null, null);
     if (!window)
     {
         printf("Failed to create GLFW window\n");
@@ -95,62 +104,30 @@ int main()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    init_font(&heap_arena, &consola, "C:/Windows/Fonts/Consola.ttf");
-    ascii_render_ctx = gl_create_text_render_context(&heap_arena, &consola, 32, 127, font_size, 1920, 1080);
+    s32 win_w, win_h;
+    glfwGetWindowSize(window, &win_w, &win_h);
 
-    Font_Render_Context consola_ascii_render_ctx;
-    init_font_render_context(&heap_arena, &consola_ascii_render_ctx);
+    consola = push_struct(&heap_arena, Font);
+    init_font(&heap_arena, consola, "C:/Windows/Fonts/Consola.ttf");
 
-    Font_Atlas consola_ascii_atlas;
-    bake_font_atlas(&heap_arena, &consola, &consola_ascii_atlas, 32, 127, 20);
+    consola_ascii_render_ctx = push_struct(&heap_arena, Font_Render_Context);
+    init_font_render_context(&heap_arena, consola_ascii_render_ctx, win_w, win_h);
     
-    Font_Render_Command consola_ascii_render_cmd;
-    consola_ascii_render_cmd.text = lorem;
-    consola_ascii_render_cmd.projection = &projection;
-    consola_ascii_render_cmd.x = 100.0f;
-    consola_ascii_render_cmd.y = 200.0f;
-    consola_ascii_render_cmd.r = 1.0f;
-    consola_ascii_render_cmd.g = 1.0f;
-    consola_ascii_render_cmd.b = 1.0f;
-
-    Font_Render_Command consola_ascii_dynamic_render_cmd = consola_ascii_render_cmd;
-    consola_ascii_dynamic_render_cmd.text = display_str;
-    consola_ascii_dynamic_render_cmd.x = 0.0f;
-    consola_ascii_dynamic_render_cmd.y = 500.0f;
+    consola_ascii_atlas = push_struct(&heap_arena, Font_Atlas);
+    bake_font_atlas(&heap_arena, consola, consola_ascii_atlas, 32, 2079, font_size);
     
     f32 dt = 0.0f;
     f32 prev_time = (f32)glfwGetTime();
 
     while (!glfwWindowShouldClose(window))
-    {
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-            glfwSetWindowShouldClose(window, true);
-                
+    {              
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        s32 window_w, window_h;
-        glfwGetWindowSize(window, &window_w, &window_h);
+        glfwGetWindowSize(window, &win_w, &win_h);
 
-        // Render technique comparison.
-#if 0
-        // Draw each glyph separately | debug ~ 290fps | release ~ 325fps
-        vec2 text_pos = {0.0f, (f32)window_h};
-        //char str[64];
-        //sprintf(str, "frame %.2fms %.0ffps", dt * 1000.0f, 1.0f / dt);
-        text_pos.y -= (f32)font_size;
-        gl_render_text(ascii_render_ctx, text_pos, lorem);
-#else
-        // Draw glyphs in batch (128) | debug ~ 1850fps | release ~ 4000fps
-        consola_ascii_render_cmd.x = 0.0f;
-        consola_ascii_render_cmd.y = (f32)window_h - font_size;
-        render_text(&consola_ascii_render_ctx, &consola_ascii_atlas, &consola_ascii_render_cmd);
-#endif
+        render_text(consola_ascii_render_ctx, consola_ascii_atlas, display_str, 1.0f, 0.0f, (f32)win_h - font_size, 1.0f, 1.0f, 1.0f);
         
-        //text_pos.y -= (f32)font_size;
-        //gl_render_text(ascii_render_ctx, text_pos, display_str);
-        //render_text(&consola_ascii_render_ctx, &consola_ascii_atlas, &consola_ascii_dynamic_render_cmd);
-
         glfwSwapBuffers(window);
         glfwPollEvents();
 

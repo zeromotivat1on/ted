@@ -19,10 +19,11 @@ void init_font(Arena* arena, Font* font, const char* path)
     stbtt_InitFont(font->info, data, stbtt_GetFontOffsetForIndex(data, 0));
 }
 
-void init_font_render_context(Arena* arena, Font_Render_Context* ctx)
+void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w, s32 win_h)
 {
     ctx->program = gl_load_program(arena, DIR_SHADERS "text_batch_2d.vs", DIR_SHADERS "text_batch_2d.fs");
-    
+    on_window_resize(ctx, win_w, win_h);
+
     ctx->charmap = push_array(arena, FONT_RENDER_BATCH_SIZE, u32);
     ctx->transforms = push_array(arena, FONT_RENDER_BATCH_SIZE, mat4);
     
@@ -54,9 +55,18 @@ void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 star
     atlas->start_charcode = start_charcode;
     atlas->end_charcode = end_charcode;
     atlas->font_size = font_size;
+    
+    glGenTextures(1, &atlas->texture_array);
+    rescale_font_atlas(arena, font, atlas, font_size);
+}
 
+void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u16 font_size)
+{
+    atlas->font_size = font_size;
+    
     const f32 scale = stbtt_ScaleForPixelHeight(font->info, (f32)font_size);
-
+    const u32 charcode_count = atlas->end_charcode - atlas->start_charcode + 1;
+    
     s32 ascent, descent, line_gap;
     stbtt_GetFontVMetrics(font->info, &ascent, &descent, &line_gap);
     atlas->line_gap = (s16)((ascent - descent + line_gap) * scale);
@@ -64,7 +74,6 @@ void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 star
     // stbtt rasterizes glyphs as 8bpp, so tell open gl to use 1 byte per color channel.
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    glGenTextures(1, &atlas->texture_array);
     glBindTexture(GL_TEXTURE_2D_ARRAY, atlas->texture_array);
     glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8, atlas->font_size, atlas->font_size, charcode_count, 0, GL_RED, GL_UNSIGNED_BYTE, null);
     
@@ -76,7 +85,7 @@ void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 star
     u8* bitmap = push(arena, font_size * font_size);    
     for (u32 i = 0; i < charcode_count; ++i)
     {
-        const u32 c = i + start_charcode;
+        const u32 c = i + atlas->start_charcode;
         Font_Glyph_Metric* metric = atlas->metrics + i;
         
         s32 w, h, offx, offy;
@@ -120,10 +129,10 @@ void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 star
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 
     // Restore default color channel size.
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);    
 }
 
-void render_text(Font_Render_Context* ctx, Font_Atlas* atlas, Font_Render_Command* cmd)
+void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const u32* text, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b)
 {
     glUseProgram(ctx->program);
     glBindVertexArray(ctx->vao);
@@ -131,14 +140,13 @@ void render_text(Font_Render_Context* ctx, Font_Atlas* atlas, Font_Render_Comman
     glBindTexture(GL_TEXTURE_2D_ARRAY, atlas->texture_array);
     
     glActiveTexture(GL_TEXTURE0);
-    glUniform3f(glGetUniformLocation(ctx->program, "u_text_color"), cmd->r, cmd->g, cmd->b);
-    glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_projection"), 1, GL_FALSE, (f32*)cmd->projection);
+    glUniform3f(glGetUniformLocation(ctx->program, "u_text_color"), r, g, b);
 
-    const char* c = cmd->text;
+    const u32* c = text;
     
     s32 work_idx = 0;
-    f32 x_pos = cmd->x;
-    f32 y_pos = cmd->y;
+    f32 x_pos = x;
+    f32 y_pos = y;
     
     while (*c != '\0')
     {        
@@ -146,8 +154,8 @@ void render_text(Font_Render_Context* ctx, Font_Atlas* atlas, Font_Render_Comman
 
         if (ci == '\n')
         {
-            y_pos -= atlas->line_gap;
-            x_pos = cmd->x;
+            x_pos = x;
+            y_pos -= atlas->line_gap * scale;
             c++;
             continue;
         }
@@ -160,20 +168,20 @@ void render_text(Font_Render_Context* ctx, Font_Atlas* atlas, Font_Render_Comman
         
         if (ci == ' ')
         {
-            x_pos += metric->advance_width;
+            x_pos += metric->advance_width * scale;
             c++;
             continue;
         }
         
-        const f32 w = (f32)atlas->font_size;
-        const f32 h = (f32)atlas->font_size;
-        const f32 x = x_pos + metric->offset_x;
-        const f32 y = y_pos - (h + metric->offset_y);
+        const f32 gw = (f32)atlas->font_size * scale;
+        const f32 gh = (f32)atlas->font_size * scale;
+        const f32 gx = x_pos + metric->offset_x * scale;
+        const f32 gy = y_pos - (gh + metric->offset_y) * scale;
         
         mat4* transform = ctx->transforms + work_idx;
         identity(transform);
-        translate(transform, vec3{x, y, 0.0f});
-        scale(transform, vec3{w, h, 0.0f});
+        translate(transform, vec3{gx, gy, 0.0f});
+        ::scale(transform, vec3{gw, gh, 0.0f});
 
         ctx->charmap[work_idx] = cis;
 
@@ -185,7 +193,7 @@ void render_text(Font_Render_Context* ctx, Font_Atlas* atlas, Font_Render_Comman
             work_idx = 0;
         }
 
-        x_pos += metric->advance_width;
+        x_pos += metric->advance_width * scale;
         c++;
     }
 
@@ -196,5 +204,13 @@ void render_text(Font_Render_Context* ctx, Font_Atlas* atlas, Font_Render_Comman
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+    glUseProgram(0);
+}
+
+void on_window_resize(const Font_Render_Context* ctx, s32 w, s32 h)
+{
+    glUseProgram(ctx->program);
+    const mat4 projection = mat4_ortho(0.0f, (f32)w, 0.0f, (f32)h, -1.0f, 1.0f);
+    glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_projection"), 1, GL_FALSE, (f32*)&projection);
     glUseProgram(0);
 }

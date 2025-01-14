@@ -62,6 +62,7 @@ struct GL_Text_Render_Context
     u32 program;
     u32 vao;
     u32 vbo;
+    s16 line_gap;
 };
 
 GL_Text_Render_Context* gl_create_text_render_context(Arena* arena, const Font* font, u32 start_code, u32 end_code, u16 font_size, s32 window_w, s32 window_h);

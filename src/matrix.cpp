@@ -5,6 +5,15 @@
 #include <math.h>
 #include <string.h>
 
+void identity(mat4* mtx)
+{
+    *mtx = {0};
+    mtx->rows[0][0] = 1.0f;
+	mtx->rows[1][1] = 1.0f;
+	mtx->rows[2][2] = 1.0f;
+	mtx->rows[3][3] = 1.0f;
+}
+
 void translate(mat4* mtx, vec3 v)
 {
     mtx->rows[3][0] = v.x;

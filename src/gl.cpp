@@ -78,7 +78,12 @@ GL_Text_Render_Context* gl_create_text_render_context(Arena* arena, const Font* 
 {
     GL_Text_Render_Context* ctx = push_struct(arena, GL_Text_Render_Context);
     ctx->glyph_cache = gl_cache_glyph_bitmaps(arena, font, start_code, end_code, font_size);
-    
+
+    const f32 scale = stbtt_ScaleForPixelHeight(font->info, (f32)font_size);
+    s32 ascent, descent, line_gap;
+    stbtt_GetFontVMetrics(font->info, &ascent, &descent, &line_gap);
+    ctx->line_gap = (ascent - descent + line_gap) * scale;
+
     glGenVertexArrays(1, &ctx->vao);
     glGenBuffers(1, &ctx->vbo);
     
@@ -120,17 +125,19 @@ GL_Glyph_Cache* gl_cache_glyph_bitmaps(Arena* arena, const Font* font, u32 start
     cache->start_code = start_code;
     cache->end_code = end_code;
     cache->glyphs = push_array(arena, end_code - start_code, GL_Glyph);
-
+    
     for (u32 c = cache->start_code, i = 0; c <= cache->end_code; ++c, ++i)
     {
         GL_Glyph* glyph = cache->glyphs + i;
-        glGenTextures(1, &glyph->texture);        
+        glGenTextures(1, &glyph->texture);
     }
     
     gl_update_glyph_bitmaps(font, cache, font_size);
    
     return cache;
 }
+
+#include <malloc.h>
 
 void gl_update_glyph_bitmaps(const Font* font, GL_Glyph_Cache* cache, s16 font_size)
 {
@@ -139,17 +146,51 @@ void gl_update_glyph_bitmaps(const Font* font, GL_Glyph_Cache* cache, s16 font_s
     
     const f32 scale = stbtt_ScaleForPixelHeight(font->info, (f32)font_size);
 
+    u8* bitmap = (u8*)malloc(font_size * font_size);
+    assert(bitmap);
+        
     for (u32 c = cache->start_code, i = 0; c <= cache->end_code; ++c, ++i)
     {
         GL_Glyph* glyph = cache->glyphs + i;
         
         const s32 glyph_index = stbtt_FindGlyphIndex(font->info, c);
-        u8* bitmap = stbtt_GetGlyphBitmap(font->info, 0, scale, glyph_index, &glyph->width_px, &glyph->height_px, &glyph->offset_x_px, &glyph->offset_y_px);
+#if 0
+        //u8* bitmap = stbtt_GetGlyphBitmap(font->info, scale, scale, glyph_index, &glyph->width_px, &glyph->height_px, &glyph->offset_x_px, &glyph->offset_y_px);
+#else   
+        u8* stb_bitmap = stbtt_GetGlyphBitmap(font->info, scale, scale, glyph_index, &glyph->width_px, &glyph->height_px, &glyph->offset_x_px, &glyph->offset_y_px);
 
+        memset(bitmap, 0, font_size * font_size);
+
+        // Get glyph bounding box
+        int x0, y0, x1, y1;
+        stbtt_GetGlyphBitmapBox(font->info, glyph_index, scale, scale, &x0, &y0, &x1, &y1);
+
+        // Calculate position to center the glyph in the square
+        int glyph_w = x1 - x0;
+        int glyph_h = y1 - y0;
+        int x_offset = (font_size - glyph_w) / 2; // Center horizontally
+        int y_offset = (font_size - glyph_h) / 2; // Center vertically
+
+        // Copy glyph bitmap into the center of the larger square
+        for (int y = 0; y < glyph_h; ++y) {
+            for (int x = 0; x < glyph_w; ++x) {
+                int src_index = y * glyph_w + x;
+                int dest_index = (y + y_offset) * font_size + (x + x_offset);
+                if (dest_index >= 0 && dest_index < font_size * font_size)
+                    bitmap[dest_index] = stb_bitmap[src_index];
+            }
+        }
+        
+        glyph->width_px = font_size;
+        glyph->height_px = font_size;
+        glyph->offset_x_px -= x_offset;
+        glyph->offset_y_px -= y_offset;
+#endif
+        
         glBindTexture(GL_TEXTURE_2D, glyph->texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, glyph->width_px, glyph->height_px, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap);
-
-        stbtt_FreeBitmap(bitmap, null);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, glyph->width_px, glyph->height_px, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap);
+        
+        stbtt_FreeBitmap(stb_bitmap, null);
         
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -160,6 +201,8 @@ void gl_update_glyph_bitmaps(const Font* font, GL_Glyph_Cache* cache, s16 font_s
         stbtt_GetGlyphHMetrics(font->info, glyph_index, &advance_width, 0);
         glyph->advance_width_px = (s32)(advance_width * scale);
     }
+
+    free(bitmap);
     
     // Restore default color channel size.
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
@@ -176,11 +219,21 @@ void gl_render_text(GL_Text_Render_Context* ctx, vec2 pos, const char* text)
     glUniformMatrix4fv(glGetUniformLocation(ctx->program, ctx->u_projection.name), 1, GL_FALSE, (f32*)&ctx->u_projection.val);
         
     glActiveTexture(GL_TEXTURE0);
-    
+
+    vec2 def_pos = pos;
     const char* c = text;
     while (*c != '\0')
     {
         const u32 ci = (u32)*c;
+
+        if (ci == '\n')
+        {
+            pos.y -= ctx->line_gap;
+            pos.x = def_pos.x;
+            c++;
+            continue;
+        }
+                
         assert(ci >= ctx->glyph_cache->start_code);
         assert(ci <= ctx->glyph_cache->end_code);
         
@@ -198,13 +251,13 @@ void gl_render_text(GL_Text_Render_Context* ctx, vec2 pos, const char* text)
         const f32 w = (f32)glyph->width_px;
         const f32 h = (f32)glyph->height_px;
         
-        ctx->u_transform.val = mat4_identity();
+        identity(&ctx->u_transform.val);
         translate(&ctx->u_transform.val, vec3{x, y, 0.0f});
         scale(&ctx->u_transform.val, vec3{w, h, 0.0f});
         glUniformMatrix4fv(glGetUniformLocation(ctx->program, ctx->u_transform.name), 1, GL_FALSE, (f32*)&ctx->u_transform.val);
         
         glBindTexture(GL_TEXTURE_2D, glyph->texture);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, 1);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
         pos.x += glyph->advance_width_px;
         c++;

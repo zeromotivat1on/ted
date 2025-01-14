@@ -18,6 +18,7 @@ struct mat4
     f32 rows[4][4];
 };
 
+void identity(mat4* mtx);
 void translate(mat4* mtx, vec3 v);
 void scale(mat4* mtx, vec3 v);
 void rotate(mat4* mtx, const mat4* rot);

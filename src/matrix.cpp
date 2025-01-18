@@ -1,9 +1,7 @@
 #include "pch.h"
 #include "matrix.h"
-#include "quat.h"
 #include "vector.h"
 #include <math.h>
-#include <string.h>
 
 void identity(mat4* mtx)
 {
@@ -28,18 +26,6 @@ void scale(mat4* mtx, vec3 v)
 	mtx->rows[2][2] = v.z;
 }
 
-void rotate(mat4* mtx, const mat4* rot)
-{
-    const mat4 res = *mtx * *rot;
-    *mtx = res;
-}
-
-void rotate(mat4* mtx, quat q)
-{
-    const mat4 rot = to_mat4(q);
-    rotate(mtx, &rot);
-}
-
 mat4 mat4_identity()
 {
     mat4 mtx = {0};
@@ -47,15 +33,6 @@ mat4 mat4_identity()
 	mtx.rows[1][1] = 1.0f;
 	mtx.rows[2][2] = 1.0f;
 	mtx.rows[3][3] = 1.0f;
-    return mtx;
-}
-
-mat4 mat4_transform(vec3 t, quat r, vec3 s)
-{
-    mat4 mtx = mat4_identity();
-    scale(&mtx, s);
-    rotate(&mtx, r);
-    translate(&mtx, t);
     return mtx;
 }
 
@@ -125,47 +102,6 @@ mat4 to_mat4(const mat3* mtx)
 		mtx->rows[2][0], mtx->rows[2][1], mtx->rows[2][2], 0.0f,
 		0.0f,		     0.0f,		      0.0f,		       1.0f
 	};
-}
-
-mat3 to_mat3(quat q)
-{
-    mat3 mtx;
-    
-    const f32 x2 = q.x + q.x;
-    const f32 y2 = q.y + q.y;
-    const f32 z2 = q.z + q.z;
-
-    const f32 xx = q.x * x2;
-    const f32 xy = q.x * y2;
-    const f32 xz = q.x * z2;
-
-    const f32 yy = q.y * y2;
-    const f32 yz = q.y * z2;
-    const f32 zz = q.z * z2;
-
-    const f32 wx = q.w * x2;
-    const f32 wy = q.w * y2;
-    const f32 wz = q.w * z2;
-
-    mtx.rows[0][0] = 1.0f - (yy + zz);
-    mtx.rows[1][0] = xy - wz;
-    mtx.rows[2][0] = xz + wy;
-
-    mtx.rows[0][1] = xy + wz;
-    mtx.rows[1][1] = 1.0f - (xx + zz);
-    mtx.rows[2][1] = yz - wx;
-
-    mtx.rows[0][2] = xz - wy;
-    mtx.rows[1][2] = yz + wx;
-    mtx.rows[2][2] = 1.0f - (xx + yy);
-
-    return mtx;
-}
-
-mat4 to_mat4(quat q)
-{
-    const mat3 mtx = to_mat3(q);
-    return to_mat4(&mtx);
 }
 
 mat4 operator*(const mat4& a, const mat4& b)

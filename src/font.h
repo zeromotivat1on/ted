@@ -42,5 +42,5 @@ void init_font(Arena* arena, Font* font, const char* path);
 void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w, s32 win_h);
 void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 start_charcode, u32 end_charcode, u16 font_size);
 void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u16 font_size);
-void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const u32* text, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b);
+void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const u32* text, u32 size, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b);
 void on_window_resize(const Font_Render_Context* ctx, s32 w, s32 h);

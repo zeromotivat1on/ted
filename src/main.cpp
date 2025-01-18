@@ -1,9 +1,10 @@
 #include "pch.h"
-#include "gl.h"
 #include "font.h"
+#include "file.h"
 #include "arena.h"
 #include "matrix.h"
 #include "memory.h"
+#include "gap_buffer.h"
 #include <stdio.h>
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
@@ -13,10 +14,7 @@ s16 font_size = 20;
 Font* consola = null;
 Font_Atlas* consola_ascii_atlas = null;
 Font_Render_Context* consola_ascii_render_ctx = null;
-
-// @Todo: remake display_str to be actual text editor compatible structure.
-s32 pointer_pos = 0;
-u32 display_str[512];
+Gap_Buffer* display_buffer = null;
 
 void char_callback(GLFWwindow* win, u32 character)
 {
@@ -35,9 +33,7 @@ void char_callback(GLFWwindow* win, u32 character)
         else rescale_font_atlas(&heap_arena, consola, consola_ascii_atlas, font_size);
     }
 
-    display_str[pointer_pos++] = character;
-    if (pointer_pos >= sizeof(display_str)) pointer_pos = 0;
-    //display_str[pointer_pos] = '\0';   
+    push_char(display_buffer, (char)character);
 }
 
 void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods)
@@ -48,16 +44,19 @@ void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mod
         glfwSetWindowShouldClose(window, true);
   
     if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        display_str[pointer_pos++] = '\n';
-        if (pointer_pos >= sizeof(display_str)) pointer_pos = 0;
-    }
+        push_char(display_buffer, '\n');
 
     if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        display_str[--pointer_pos] = ' ';
-        if (pointer_pos < 0) pointer_pos = 0;
-    }
+        delete_char(display_buffer);
+    
+    if (key == GLFW_KEY_DELETE && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        delete_char_overwrite(display_buffer);
+
+    if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        move_cursor(display_buffer, -1);
+        
+    if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        move_cursor(display_buffer, 1);        
 }
 
 void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
@@ -66,14 +65,27 @@ void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
     glViewport(0, 0, width, height);
 }
 
-int main()
+void drop_callback(GLFWwindow* window, int count, const char** paths)
 {
+    // @Cleanup: handle only first path or all of them?
+    const char* file_path = paths[0];
+    s32 size = 0;
+    u8* data = read_entire_file(&heap_arena, file_path, &size);
+    push_str(display_buffer, (char*)data, size);
+    display_buffer->cursor = display_buffer->start;
+}
+
+int main()
+{    
     void* vm_base_addr = vm_base_addr_val;
     void* vm_core = vm_reserve(vm_base_addr, GB(1));
 
     constexpr u32 heap_size = MB(16);
     void* heap = vm_commit(vm_core, heap_size);
-    heap_arena = create_arena(heap, heap_size);
+    init_arena(&heap_arena, heap, heap_size);
+
+    display_buffer = push_struct(&heap_arena, Gap_Buffer);
+    init(display_buffer, 8);
 
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -94,6 +106,7 @@ int main()
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCharCallback(window, char_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetDropCallback(window, drop_callback);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
@@ -114,19 +127,41 @@ int main()
     init_font_render_context(&heap_arena, consola_ascii_render_ctx, win_w, win_h);
     
     consola_ascii_atlas = push_struct(&heap_arena, Font_Atlas);
-    bake_font_atlas(&heap_arena, consola, consola_ascii_atlas, 32, 2079, font_size);
+    bake_font_atlas(&heap_arena, consola, consola_ascii_atlas, 0, 127, font_size);
     
     f32 dt = 0.0f;
     f32 prev_time = (f32)glfwGetTime();
 
+    u32 display_str[512] = {0};
+    u32 display_debug_str[512] = {0};
+    u32 display_debug_data_str[256] = {0};
+    char debug_data_str[256] = {0};
+    s64 render_text_size = 0;
+    
+    const vec3 bg_color = {2.0f / 255.0f, 26.0f / 255.0f, 25.0f / 255.0f};
+    const vec3 text_color = {255.0f / 255.0f, 220.0f / 255.0f, 194.0f / 255.0f};
+
     while (!glfwWindowShouldClose(window))
     {              
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClearColor(bg_color.r, bg_color.g, bg_color.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glfwGetWindowSize(window, &win_w, &win_h);
 
-        render_text(consola_ascii_render_ctx, consola_ascii_atlas, display_str, 1.0f, 0.0f, (f32)win_h - font_size, 1.0f, 1.0f, 1.0f);
+        render_text_size = fill_utf32(display_buffer, display_str);
+        render_text(consola_ascii_render_ctx, consola_ascii_atlas, display_str, render_text_size, 1.0f, 0.0f, (f32)win_h - font_size, text_color.r, text_color.g, text_color.b);
+
+#if 0
+        render_text_size = fill_debug_utf32(display_buffer, display_debug_str);
+        render_text(consola_ascii_render_ctx, consola_ascii_atlas, display_debug_str, render_text_size, 1.0f, 0.0f, (f32)win_h * 0.5f - font_size, text_color.r, text_color.g, text_color.b);
+#endif
+        
+        render_text_size = sprintf(debug_data_str, "cursor_pos=%lld, end=%lld, gap_start=%lld, gap_end=%lld\n", display_buffer->cursor - display_buffer->start, display_buffer->end - display_buffer->start, display_buffer->gap_start - display_buffer->start, display_buffer->gap_end - display_buffer->start);
+            
+        for (u32 i = 0; i < render_text_size; ++i)
+            display_debug_data_str[i] = debug_data_str[i];
+        
+        render_text(consola_ascii_render_ctx, consola_ascii_atlas, display_debug_data_str, render_text_size, 1.0f, 0.0f, font_size, text_color.r, text_color.g, text_color.b);
         
         glfwSwapBuffers(window);
         glfwPollEvents();

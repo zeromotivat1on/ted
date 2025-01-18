@@ -66,6 +66,10 @@ void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u16 f
     
     const f32 scale = stbtt_ScaleForPixelHeight(font->info, (f32)font_size);
     const u32 charcode_count = atlas->end_charcode - atlas->start_charcode + 1;
+
+    s32 max_layers;
+    glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &max_layers);
+    assert(charcode_count <= (u32)max_layers);
     
     s32 ascent, descent, line_gap;
     stbtt_GetFontVMetrics(font->info, &ascent, &descent, &line_gap);
@@ -132,7 +136,7 @@ void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u16 f
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);    
 }
 
-void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const u32* text, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b)
+void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const u32* text, u32 size, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b)
 {
     glUseProgram(ctx->program);
     glBindVertexArray(ctx->vao);
@@ -142,21 +146,18 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
     glActiveTexture(GL_TEXTURE0);
     glUniform3f(glGetUniformLocation(ctx->program, "u_text_color"), r, g, b);
 
-    const u32* c = text;
-    
     s32 work_idx = 0;
     f32 x_pos = x;
     f32 y_pos = y;
     
-    while (*c != '\0')
-    {        
-        const u32 ci = (u32)*c;
-
+    for (u32 i = 0; i < size; ++i)
+    {
+        const u32 ci = text[i];
+        
         if (ci == '\n')
         {
             x_pos = x;
             y_pos -= atlas->line_gap * scale;
-            c++;
             continue;
         }
         
@@ -169,7 +170,6 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
         if (ci == ' ')
         {
             x_pos += metric->advance_width * scale;
-            c++;
             continue;
         }
         
@@ -194,7 +194,6 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
         }
 
         x_pos += metric->advance_width * scale;
-        c++;
     }
 
     glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_transforms"), work_idx, GL_FALSE, (f32*)ctx->transforms);

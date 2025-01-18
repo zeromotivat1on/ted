@@ -12,7 +12,7 @@ struct Arena
 #define push_struct(arena, type)       (type*)push(arena, sizeof(type))
 #define push_array(arena, count, type) (type*)push(arena, sizeof(type) * (count))
 
-inline void init_arena(void* base, u64 size, Arena* arena)
+inline void init_arena(Arena* arena, void* base, u64 size)
 {
     arena->base = (u8*)base;
     arena->size = size;
@@ -49,7 +49,7 @@ inline void pop(Arena* arena, u64 size)
 inline Arena create_arena(void* base, u64 size)
 {
     Arena arena;
-    init_arena(base, size, &arena);
+    init_arena(&arena, base, size);
     return arena;
 }
 

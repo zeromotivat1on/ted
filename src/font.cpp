@@ -1,9 +1,10 @@
 #include "pch.h"
 #include "font.h"
+#include "gl.h"
 #include "file.h"
 #include "arena.h"
 #include "matrix.h"
-#include "gl.h"
+#include "gap_buffer.h"
 #include <stdio.h>
 #include <glad/glad.h>
 
@@ -22,7 +23,7 @@ void init_font(Arena* arena, Font* font, const char* path)
 void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w, s32 win_h)
 {
     ctx->program = gl_load_program(arena, DIR_SHADERS "text_batch_2d.vs", DIR_SHADERS "text_batch_2d.fs");
-    on_window_resize(ctx, win_w, win_h);
+    on_framebuffer_resize(ctx, win_w, win_h);
 
     ctx->charmap = push_array(arena, FONT_RENDER_BATCH_SIZE, u32);
     ctx->transforms = push_array(arena, FONT_RENDER_BATCH_SIZE, mat4);
@@ -152,22 +153,22 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
     
     for (u32 i = 0; i < size; ++i)
     {
-        const u32 ci = text[i];
+        const u32 c = text[i];
         
-        if (ci == '\n')
+        if (c == '\n')
         {
             x_pos = x;
             y_pos -= atlas->line_gap * scale;
             continue;
         }
         
-        assert(ci >= atlas->start_charcode);
-        assert(ci <= atlas->end_charcode);
+        assert(c >= atlas->start_charcode);
+        assert(c <= atlas->end_charcode);
 
-        const u32 cis = ci - atlas->start_charcode; // correctly shifted index
-        const Font_Glyph_Metric* metric = atlas->metrics + cis;
+        const u32 ci = c - atlas->start_charcode; // correctly shifted index
+        const Font_Glyph_Metric* metric = atlas->metrics + ci;
         
-        if (ci == ' ')
+        if (c == ' ')
         {
             x_pos += metric->advance_width * scale;
             continue;
@@ -183,7 +184,7 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
         translate(transform, vec3{gx, gy, 0.0f});
         ::scale(transform, vec3{gw, gh, 0.0f});
 
-        ctx->charmap[work_idx] = cis;
+        ctx->charmap[work_idx] = ci;
 
         if (++work_idx >= FONT_RENDER_BATCH_SIZE)
         {
@@ -206,7 +207,159 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
     glUseProgram(0);
 }
 
-void on_window_resize(const Font_Render_Context* ctx, s32 w, s32 h)
+void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const char* text, u32 size, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b)
+{
+    glUseProgram(ctx->program);
+    glBindVertexArray(ctx->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, atlas->texture_array);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glUniform3f(glGetUniformLocation(ctx->program, "u_text_color"), r, g, b);
+
+    s32 work_idx = 0;
+    f32 x_pos = x;
+    f32 y_pos = y;
+    
+    for (u32 i = 0; i < size; ++i)
+    {
+        const char c = text[i];
+        
+        if (c == '\n')
+        {
+            x_pos = x;
+            y_pos -= atlas->line_gap * scale;
+            continue;
+        }
+        
+        assert((u32)c >= atlas->start_charcode);
+        assert((u32)c <= atlas->end_charcode);
+
+        const u32 ci = c - atlas->start_charcode; // correctly shifted index
+        const Font_Glyph_Metric* metric = atlas->metrics + ci;
+        
+        if (c == ' ')
+        {
+            x_pos += metric->advance_width * scale;
+            continue;
+        }
+        
+        const f32 gw = (f32)atlas->font_size * scale;
+        const f32 gh = (f32)atlas->font_size * scale;
+        const f32 gx = x_pos + metric->offset_x * scale;
+        const f32 gy = y_pos - (gh + metric->offset_y) * scale;
+        
+        mat4* transform = ctx->transforms + work_idx;
+        identity(transform);
+        translate(transform, vec3{gx, gy, 0.0f});
+        ::scale(transform, vec3{gw, gh, 0.0f});
+
+        ctx->charmap[work_idx] = ci;
+
+        if (++work_idx >= FONT_RENDER_BATCH_SIZE)
+        {
+            glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_transforms"), work_idx, GL_FALSE, (f32*)ctx->transforms);
+            glUniform1uiv(glGetUniformLocation(ctx->program, "u_charmap"), work_idx, ctx->charmap);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, work_idx);
+            work_idx = 0;
+        }
+
+        x_pos += metric->advance_width * scale;
+    }
+
+    glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_transforms"), work_idx, GL_FALSE, (f32*)ctx->transforms);
+    glUniform1uiv(glGetUniformLocation(ctx->program, "u_charmap"), work_idx, ctx->charmap);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, work_idx);
+    
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);    
+}
+
+void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const Gap_Buffer* buffer, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b)
+{
+    glUseProgram(ctx->program);
+    glBindVertexArray(ctx->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, atlas->texture_array);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glUniform3f(glGetUniformLocation(ctx->program, "u_text_color"), r, g, b);
+
+    const u32 size = (u32)data_size(buffer);
+    const u32 prefix_size = (u32)prefix_data_size(buffer);
+    
+    s32 work_idx = 0;
+    f32 x_pos = x;
+    f32 y_pos = y;
+    
+    for (u32 i = 0, j = 0; i < size; ++i)
+    {
+        char c;
+        if (i < prefix_size) c = buffer->start[i];
+        else c = buffer->gap_end[j++];
+        
+        if (c == '\n')
+        {
+            x_pos = x;
+            y_pos -= atlas->line_gap * scale;
+            continue;
+        }
+        
+        assert((u32)c >= atlas->start_charcode);
+        assert((u32)c <= atlas->end_charcode);
+
+        const u32 ci = c - atlas->start_charcode; // correctly shifted index
+        const Font_Glyph_Metric* metric = atlas->metrics + ci;
+
+        if (c == ' ')
+        {
+            x_pos += metric->advance_width * scale;
+            continue;
+        }
+
+        if (c == '\t')
+        {
+            // @Todo: handle different tab sizes, 4 by default for now.
+            x_pos += 4 * metric->advance_width * scale;
+            continue;
+        }
+                
+        const f32 gw = (f32)atlas->font_size * scale;
+        const f32 gh = (f32)atlas->font_size * scale;
+        const f32 gx = x_pos + metric->offset_x * scale;
+        const f32 gy = y_pos - (gh + metric->offset_y) * scale;
+        
+        mat4* transform = ctx->transforms + work_idx;
+        identity(transform);
+        translate(transform, vec3{gx, gy, 0.0f});
+        ::scale(transform, vec3{gw, gh, 0.0f});
+
+        ctx->charmap[work_idx] = ci;
+
+        if (++work_idx >= FONT_RENDER_BATCH_SIZE)
+        {
+            glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_transforms"), work_idx, GL_FALSE, (f32*)ctx->transforms);
+            glUniform1uiv(glGetUniformLocation(ctx->program, "u_charmap"), work_idx, ctx->charmap);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, work_idx);
+            work_idx = 0;
+        }
+
+        x_pos += metric->advance_width * scale;
+    }
+
+    glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_transforms"), work_idx, GL_FALSE, (f32*)ctx->transforms);
+    glUniform1uiv(glGetUniformLocation(ctx->program, "u_charmap"), work_idx, ctx->charmap);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, work_idx);
+    
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);    
+}
+
+void on_framebuffer_resize(const Font_Render_Context* ctx, s32 w, s32 h)
 {
     glUseProgram(ctx->program);
     const mat4 projection = mat4_ortho(0.0f, (f32)w, 0.0f, (f32)h, -1.0f, 1.0f);

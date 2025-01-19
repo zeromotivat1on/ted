@@ -23,5 +23,6 @@ using f64 = double;
 #define GB(n) (MB(n) * 1024ULL)
 #define TB(n) (GB(n) * 1024ULL)
 
-#define max(a, b) ((a) > (b) ? (a) : (b))
 #define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
+#define clamp(x, a, b) (min((b), max((a), (x))))

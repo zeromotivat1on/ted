@@ -1,79 +1,19 @@
 #include "pch.h"
-#include "font.h"
-#include "file.h"
+#include "ted.h"
 #include "arena.h"
-#include "matrix.h"
 #include "memory.h"
-#include "gap_buffer.h"
 #include <stdio.h>
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
 
+#if 0
 Arena heap_arena;
 s16 font_size = 20;
 Font* consola = null;
 Font_Atlas* consola_ascii_atlas = null;
 Font_Render_Context* consola_ascii_render_ctx = null;
 Gap_Buffer* display_buffer = null;
-
-void char_callback(GLFWwindow* win, u32 character)
-{
-    //printf("Window char (%c) as u32 (%u)\n", character, character);
-    
-    if (character == '+')
-    {
-        font_size += 2;
-        if (font_size > 256) font_size = 256;
-        else rescale_font_atlas(&heap_arena, consola, consola_ascii_atlas, font_size);
-    }
-    else if (character == '-')
-    {
-        font_size -= 2;
-        if (font_size <= 0) font_size = 2;
-        else rescale_font_atlas(&heap_arena, consola, consola_ascii_atlas, font_size);
-    }
-
-    push_char(display_buffer, (char)character);
-}
-
-void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods)
-{
-    //printf("Window key (%d) as char (%c)\n", key, (u32)key);
-
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-  
-    if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        push_char(display_buffer, '\n');
-
-    if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        delete_char(display_buffer);
-    
-    if (key == GLFW_KEY_DELETE && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        delete_char_overwrite(display_buffer);
-
-    if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        move_cursor(display_buffer, -1);
-        
-    if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        move_cursor(display_buffer, 1);        
-}
-
-void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
-{
-    on_window_resize(consola_ascii_render_ctx, width, height);
-    glViewport(0, 0, width, height);
-}
-
-void drop_callback(GLFWwindow* window, int count, const char** paths)
-{
-    // @Cleanup: handle only first path or all of them?
-    const char* file_path = paths[0];
-    s32 size = 0;
-    u8* data = read_entire_file(&heap_arena, file_path, &size);
-    push_str(display_buffer, (char*)data, size);
-    display_buffer->cursor = display_buffer->start;
-}
+#endif
 
 int main()
 {    
@@ -82,8 +22,20 @@ int main()
 
     constexpr u32 heap_size = MB(16);
     void* heap = vm_commit(vm_core, heap_size);
-    init_arena(&heap_arena, heap, heap_size);
+    Arena heap_arena = create_arena(heap, heap_size);
 
+#if 1
+    auto* ted = push_struct(&heap_arena, Ted_Context);
+    init_ted_context(&heap_arena, ted);
+    create_window(ted, 800, 600, "ted");
+    load_font(ted, "C:/Windows/Fonts/Consola.ttf");
+    init_render_context(ted);
+    bake_font(ted, 0, 127, 6, 64, 4);
+
+    const s16 main_buffer = create_buffer(ted);
+    set_active_buffer(ted, main_buffer);
+#else
+    
     display_buffer = push_struct(&heap_arena, Gap_Buffer);
     init(display_buffer, 8);
 
@@ -129,9 +81,6 @@ int main()
     consola_ascii_atlas = push_struct(&heap_arena, Font_Atlas);
     bake_font_atlas(&heap_arena, consola, consola_ascii_atlas, 0, 127, font_size);
     
-    f32 dt = 0.0f;
-    f32 prev_time = (f32)glfwGetTime();
-
     u32 display_str[512] = {0};
     u32 display_debug_str[512] = {0};
     u32 display_debug_data_str[256] = {0};
@@ -140,9 +89,16 @@ int main()
     
     const vec3 bg_color = {2.0f / 255.0f, 26.0f / 255.0f, 25.0f / 255.0f};
     const vec3 text_color = {255.0f / 255.0f, 220.0f / 255.0f, 194.0f / 255.0f};
+#endif
 
-    while (!glfwWindowShouldClose(window))
-    {              
+    f32 dt = 0.0f;
+    f32 prev_time = (f32)glfwGetTime();
+    
+    while (alive(ted))
+    {
+#if 1
+        update_frame(ted);
+#else
         glClearColor(bg_color.r, bg_color.g, bg_color.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -165,13 +121,14 @@ int main()
         
         glfwSwapBuffers(window);
         glfwPollEvents();
-
+#endif
+        
         const f32 time = (f32)glfwGetTime();
         dt = time - prev_time;
         prev_time = time;
     }
     
-    glfwTerminate();
+    destroy(ted);
     vm_release(vm_core);
     
     return 0;

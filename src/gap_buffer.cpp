@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <malloc.h>
 
-static char* convert_user_to_gap_space(Gap_Buffer* buffer, char* c)
+static char* convert_user_to_gap_space(const Gap_Buffer* buffer, char* c)
 {
     if (c <= buffer->gap_start) return c;
     if (c < buffer->gap_end) return c + (buffer->gap_end - buffer->gap_start);
@@ -21,7 +21,7 @@ static void move_gap_to_cursor(Gap_Buffer* buffer)
     if (gsp_cursor < buffer->gap_start)
     {
         const s64 move_size = buffer->gap_start - gsp_cursor;
-        memmove(gsp_cursor + gap_size(buffer), gsp_cursor, move_size);
+        memmove(gsp_cursor + gap_data_size(buffer), gsp_cursor, move_size);
         buffer->gap_end -= move_size;
         buffer->gap_start = gsp_cursor;
     }
@@ -35,19 +35,34 @@ static void move_gap_to_cursor(Gap_Buffer* buffer)
     }
 }
 
-s64 total_size(Gap_Buffer* buffer)
+s64 cursor_pos(const Gap_Buffer* buffer)
+{
+    return buffer->cursor - buffer->start;
+}
+
+s64 total_data_size(const Gap_Buffer* buffer)
 {
     return buffer->end - buffer->start;
 }
 
-s64 gap_size(Gap_Buffer* buffer)
+s64 gap_data_size(const Gap_Buffer* buffer)
 {
     return buffer->gap_end - buffer->gap_start;    
 }
 
-s64 data_size(Gap_Buffer* buffer)
+s64 data_size(const Gap_Buffer* buffer)
 {
-    return total_size(buffer) - gap_size(buffer);
+    return total_data_size(buffer) - gap_data_size(buffer);
+}
+
+s64 prefix_data_size(const Gap_Buffer* buffer)
+{
+    return buffer->gap_start - buffer->start;
+}
+
+s64 suffix_data_size(const Gap_Buffer* buffer)
+{
+    return buffer->end - buffer->gap_end;
 }
 
 void init(Gap_Buffer* buffer, s64 size)
@@ -60,11 +75,18 @@ void init(Gap_Buffer* buffer, s64 size)
     buffer->gap_end = buffer->start + total_size;
 }
 
+void free(Gap_Buffer* buffer)
+{
+    assert(buffer->start);
+    free(buffer->start);
+    *buffer = {0};
+}
+
 void expand(Gap_Buffer* buffer, s64 extra_size)
 {
     const char* old_start = buffer->start;
     const s64 add_size = extra_size + GAP_EXPAND_SIZE;
-    const s64 new_size = total_size(buffer) + add_size;
+    const s64 new_size = total_data_size(buffer) + add_size;
     buffer->start = (char*)realloc(buffer->start, new_size);
 
     const s64 offset = buffer->start - old_start;
@@ -88,7 +110,7 @@ void set_cursor(Gap_Buffer* buffer, s64 pos)
 
 void move_cursor(Gap_Buffer* buffer, s64 delta)
 {
-    set_cursor(buffer, buffer->cursor - buffer->start + delta);
+    set_cursor(buffer, cursor_pos(buffer) + delta);
 }
 
 void push_char(Gap_Buffer* buffer, char c)
@@ -102,7 +124,7 @@ void push_char(Gap_Buffer* buffer, char c)
 void push_str(Gap_Buffer* buffer, const char* str, s64 size)
 {
     move_gap_to_cursor(buffer);
-    if (size > gap_size(buffer)) expand(buffer, size);
+    if (size > gap_data_size(buffer)) expand(buffer, size);
 
     for (s64 i = 0; i < size; ++i)
         *buffer->gap_start++ = str[i];
@@ -125,10 +147,10 @@ void delete_char_overwrite(Gap_Buffer* buffer)
     buffer->gap_end++;
 }
 
-s64 fill_utf8(Gap_Buffer* buffer, char* data)
+s64 fill_utf8(const Gap_Buffer* buffer, char* data)
 {
-    const s64 prefix_size = buffer->gap_start - buffer->start;
-    const s64 suffix_size = buffer->end - buffer->gap_end;
+    const s64 prefix_size = prefix_data_size(buffer);
+    const s64 suffix_size = suffix_data_size(buffer);
     memcpy(data, buffer->start, prefix_size);
     memcpy(data + prefix_size, buffer->gap_end, suffix_size);
 
@@ -137,13 +159,13 @@ s64 fill_utf8(Gap_Buffer* buffer, char* data)
     return size;
 }
 
-s64 fill_utf32(Gap_Buffer* buffer, u32* data)
+s64 fill_utf32(const Gap_Buffer* buffer, u32* data)
 {          
-    const s64 prefix_size = buffer->gap_start - buffer->start;
+    const s64 prefix_size = prefix_data_size(buffer);
     for (s64 i = 0; i < prefix_size; ++i)
         data[i] = (u32)buffer->start[i];
         
-    const s64 suffix_size = buffer->end - buffer->gap_end;
+    const s64 suffix_size = suffix_data_size(buffer);
     for (s64 i = 0; i < suffix_size; ++i)
         data[i + prefix_size] = (u32)buffer->gap_end[i];
 
@@ -152,7 +174,7 @@ s64 fill_utf32(Gap_Buffer* buffer, u32* data)
     return size;
 }
 
-s64 fill_debug_utf32(Gap_Buffer* buffer, u32* data)
+s64 fill_debug_utf32(const Gap_Buffer* buffer, u32* data)
 {
     const char* c = buffer->start;
 

@@ -9,7 +9,7 @@ struct Font_Render_Context;
 struct Gap_Buffer;
 struct GLFWwindow;
 
-#define TED_DRAW_DEBUG_INFO 1
+#define TED_DEBUG 1
 
 inline constexpr s32 TED_MAX_BUFFERS = 32;
 inline constexpr s32 TED_MAX_BUFFER_SIZE = KB(256);
@@ -22,7 +22,8 @@ struct Ted_Buffer
     f32 x;
     f32 y;
     f32 max_x; // @Todo: depends on longest line size?
-    f32 min_y; // @Todo: depends on line count?
+    f32 min_y;
+    f32 max_y;
 };
 
 struct Ted_Context
@@ -42,6 +43,10 @@ struct Ted_Context
     vec3 bg_color;
     vec3 text_color;
     f32 buffer_min_x;
+
+#if TED_DEBUG
+    Font_Atlas* debug_atlas;
+#endif
 };
 
 Ted_Buffer* active_buffer(Ted_Context* ctx);

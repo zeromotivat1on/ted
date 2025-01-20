@@ -3,9 +3,10 @@
 #include "file.h"
 #include "font.h"
 #include "arena.h"
+#include "matrix.h"
 #include "gap_buffer.h"
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
 
@@ -84,12 +85,10 @@ static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
     auto* atlas = active_atlas(ctx);
     auto* buffer = active_buffer(ctx);
 
-    // @Todo: correct scroll for buffers that do not fit into window (hor and/or vert).
     if (yoffset)
     {
-        const f32 max_y = (f32)(ctx->window_h - atlas->font_size);
         buffer->y -= (f32)yoffset * atlas->font_size;
-        buffer->y = clamp(buffer->y, buffer->min_y, max_y);
+        buffer->y = clamp(buffer->y, buffer->min_y, buffer->max_y);
     }
     
     if (xoffset)
@@ -136,6 +135,10 @@ void init_ted_context(Arena* arena, Ted_Context* ctx)
     ctx->bg_color = vec3{2.0f / 255.0f, 26.0f / 255.0f, 25.0f / 255.0f};
     ctx->text_color = vec3{255.0f / 255.0f, 220.0f / 255.0f, 194.0f / 255.0f};
     ctx->buffer_min_x = 4.0f; // @Todo: make it customizable constant.
+
+#if TED_DEBUG
+    ctx->debug_atlas = push_struct(arena, Font_Atlas);
+#endif
 }
 
 void destroy(Ted_Context* ctx)
@@ -177,7 +180,7 @@ void create_window(Ted_Context* ctx, s16 win_w, s16 win_h, const char* name)
     glfwSetWindowUserPointer(ctx->window, ctx);
     
     glfwMakeContextCurrent(ctx->window);
-    glfwSwapInterval(0);
+    glfwSwapInterval(1);
 
     glfwSetWindowSizeCallback(ctx->window, window_size_callback);
     glfwSetFramebufferSizeCallback(ctx->window, framebuffer_size_callback);
@@ -219,6 +222,10 @@ void bake_font(Ted_Context* ctx, u32 start_charcode, u32 end_charcode, s16 min_f
 
     ctx->atlas_count = i;
     ctx->active_atlas_idx = i / 2;
+
+#if TED_DEBUG
+    bake_font_atlas(ctx->arena, ctx->font, ctx->debug_atlas, 0, 127, 16);
+#endif
 }
 
 s16 create_buffer(Ted_Context* ctx)
@@ -248,7 +255,7 @@ void load_file_contents(Ted_Context* ctx, s16 buffer_idx, const char* path)
     s32 size = 0;
     u8* data = read_entire_file(&buffer->arena, path, &size);
 
-    // Handle non-ascii?
+    // @Todo: handle non-ascii?
     push_str(buffer->display_buffer, (char*)data, size);
 }
 
@@ -287,8 +294,7 @@ void increase_font_size(Ted_Context* ctx)
     const s16 old_font_size = active_atlas(ctx)->font_size;
     
     ctx->active_atlas_idx++;
-    if (ctx->active_atlas_idx >= ctx->atlas_count)
-        ctx->active_atlas_idx = ctx->atlas_count - 1;
+    ctx->active_atlas_idx = min(ctx->atlas_count - 1, ctx->active_atlas_idx);
 
     const auto* atlas = active_atlas(ctx);
     auto* buffer = active_buffer(ctx);
@@ -301,12 +307,110 @@ void decrease_font_size(Ted_Context* ctx)
     const s16 old_font_size = active_atlas(ctx)->font_size;
     
     ctx->active_atlas_idx--;
-    if (ctx->active_atlas_idx < 0)
-        ctx->active_atlas_idx = 0;
+    ctx->active_atlas_idx = max(0, ctx->active_atlas_idx);
 
     const auto* atlas = active_atlas(ctx);
     auto* buffer = active_buffer(ctx);
     //buffer->y += (f32)(atlas->font_size - old_font_size);
+}
+
+static void render(Ted_Context* ctx)
+{
+    auto* buffer = active_buffer(ctx);
+    const auto* atlas = active_atlas(ctx);
+
+    glUseProgram(ctx->render_ctx->program);
+    glBindVertexArray(ctx->render_ctx->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->render_ctx->vbo);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, atlas->texture_array);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glUniform3f(glGetUniformLocation(ctx->render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
+    
+    const u32 size = (u32)data_size(buffer->display_buffer);
+    const u32 prefix_size = (u32)prefix_data_size(buffer->display_buffer);
+    
+    s32 work_idx = 0;
+    f32 x = buffer->x;
+    f32 y = buffer->y;
+    
+    for (u32 i = 0, j = 0; i < size; ++i)
+    {
+        char c;
+        if (i < prefix_size) c = buffer->display_buffer->start[i];
+        else c = buffer->display_buffer->gap_end[j++];
+        
+        if (c == '\n')
+        {
+            x = buffer->x;
+            y -= atlas->line_gap;
+            continue;
+        }
+        
+        assert((u32)c >= atlas->start_charcode);
+        assert((u32)c <= atlas->end_charcode);
+
+        const u32 ci = c - atlas->start_charcode; // correctly shifted index
+        const Font_Glyph_Metric* metric = atlas->metrics + ci;
+
+        if (c == ' ')
+        {
+            x += metric->advance_width;
+            continue;
+        }
+
+        if (c == '\t')
+        {
+            // @Todo: handle different tab sizes, 4 by default for now.
+            x += 4 * metric->advance_width;
+            continue;
+        }
+                
+        const f32 gw = (f32)atlas->font_size;
+        const f32 gh = (f32)atlas->font_size;
+        const f32 gx = x + metric->offset_x;
+        const f32 gy = y - (gh + metric->offset_y);
+        
+        mat4* transform = ctx->render_ctx->transforms + work_idx;
+        identity(transform);
+        translate(transform, vec3{gx, gy, 0.0f});
+        scale(transform, vec3{gw, gh, 0.0f});
+
+        ctx->render_ctx->charmap[work_idx] = ci;
+
+        if (++work_idx >= FONT_RENDER_BATCH_SIZE)
+        {
+            glUniformMatrix4fv(glGetUniformLocation(ctx->render_ctx->program, "u_transforms"), work_idx, GL_FALSE, (f32*)ctx->render_ctx->transforms);
+            glUniform1uiv(glGetUniformLocation(ctx->render_ctx->program, "u_charmap"), work_idx, ctx->render_ctx->charmap);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, work_idx);
+            work_idx = 0;
+        }
+
+        x += metric->advance_width;
+    }
+
+    const f32 topmost_y = (f32)(ctx->window_h - atlas->font_size);
+    const f32 content_vert_size = fabsf(buffer->y - y);
+    if (content_vert_size > ctx->window_h)
+    {
+        // Add extra font size padding to show at least one line entirely.
+        buffer->max_y = topmost_y + content_vert_size - atlas->font_size;
+        buffer->min_y = topmost_y;
+    }
+    else
+    {
+        buffer->max_y = topmost_y;
+        buffer->min_y = topmost_y;
+    }
+        
+    glUniformMatrix4fv(glGetUniformLocation(ctx->render_ctx->program, "u_transforms"), work_idx, GL_FALSE, (f32*)ctx->render_ctx->transforms);
+    glUniform1uiv(glGetUniformLocation(ctx->render_ctx->program, "u_charmap"), work_idx, ctx->render_ctx->charmap);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, work_idx);
+    
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);
 }
 
 void update_frame(Ted_Context* ctx)
@@ -314,17 +418,16 @@ void update_frame(Ted_Context* ctx)
     glClearColor(ctx->bg_color.r, ctx->bg_color.g, ctx->bg_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    render(ctx);
+
+#if TED_DEBUG
+    static char debug_str[512];
+    static u32 debug_text[512];
     const auto* buffer = active_buffer(ctx);
-    const auto* atlas = active_atlas(ctx);
-
-    // @Cleanup: we probably want own render_text implementation.
-    render_text(ctx->render_ctx, atlas, buffer->display_buffer, 1.0f, buffer->x, buffer->y, ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
-
-#if TED_DRAW_DEBUG_INFO
-    atlas = ctx->atlases + 2; // use smaller atlas for debug info
-    static char debug_info_str[512];
-    const s32 debug_info_str_size = sprintf(debug_info_str, "cursor_pos=%lld, end=%lld, gap_start=%lld, gap_end=%lld, buffer_y=%.2f\n", cursor_pos(buffer->display_buffer), total_data_size(buffer->display_buffer), prefix_data_size(buffer->display_buffer), buffer->display_buffer->gap_end - buffer->display_buffer->start, buffer->y);
-    render_text(ctx->render_ctx, atlas, debug_info_str, debug_info_str_size, 1.0f, atlas->font_size * 0.5f, atlas->font_size * 0.5f, 1.0f, 1.0f, 1.0f);
+    const s32 debug_str_size = sprintf(debug_str, "cursor_pos=%lld, end=%lld, gap_start=%lld, gap_end=%lld, buffer_y=%.2f, buffer_max_y=%.2f\n", cursor_pos(buffer->display_buffer), total_data_size(buffer->display_buffer), prefix_data_size(buffer->display_buffer), buffer->display_buffer->gap_end - buffer->display_buffer->start, buffer->y, buffer->max_y);
+    for (s32 i = 0; i < debug_str_size; ++i)
+        debug_text[i] = debug_str[i];
+    render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, ctx->debug_atlas->font_size * 0.5f, ctx->debug_atlas->font_size * 0.5f, 1.0f, 1.0f, 1.0f);
 #endif
     
     glfwSwapBuffers(ctx->window);

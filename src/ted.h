@@ -11,20 +11,21 @@ struct GLFWwindow;
 
 #define TED_DEBUG 1
 
-inline constexpr s32 TED_MAX_BUFFERS = 32;
+inline constexpr s32 TED_MAX_BUFFERS = 64;
 inline constexpr s32 TED_MAX_BUFFER_SIZE = KB(256);
 inline constexpr s32 TED_MAX_ATLASES = 64;
 
 struct Ted_Buffer
 {
-    Arena arena;
+    Arena arena; // is meant for buffer contents alone
     Gap_Buffer* display_buffer;
     char* path;
-    f32 x;
-    f32 y;
-    f32 max_x; // @Todo: depends on longest line size?
-    f32 min_y;
-    f32 max_y;
+    s32 line_count;
+    s16 x;
+    s32 y;
+    s16 max_x; // @Todo: depends on longest line size?
+    s16 min_y;
+    s32 max_y;
 };
 
 struct Ted_Context
@@ -35,16 +36,16 @@ struct Ted_Context
     Font_Atlas* atlases;
     Font_Render_Context* render_ctx;
     Ted_Buffer* buffers;
+    vec3 bg_color;
+    vec3 text_color;
+    f32 dt;
     s16 atlas_count;
     s16 active_atlas_idx;
     s16 buffer_count;
     s16 active_buffer_idx;
     s16 window_w;
     s16 window_h;
-    vec3 bg_color;
-    vec3 text_color;
-    f32 buffer_min_x;
-    f32 dt;
+    s16 buffer_min_x;
     
 #if TED_DEBUG
     Font_Atlas* debug_atlas;

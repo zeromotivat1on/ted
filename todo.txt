@@ -3,7 +3,6 @@
 - Cursor visuals
 - Fix buffer y positioning
   - Some glyph parts from upper line can be visible after scroll to topmost position
-  - Correct y position after font size change
 - Up/down arrow navigation and mouse click
 - Clipboard copy/paste
 - Region selection/cut/paste etc

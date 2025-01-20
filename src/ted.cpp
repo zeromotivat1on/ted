@@ -85,13 +85,13 @@ static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
 
     if (yoffset)
     {
-        buffer->y -= (f32)yoffset * atlas->line_gap;
+        buffer->y -= (s16)yoffset * atlas->line_gap;
         buffer->y = clamp(buffer->y, buffer->min_y, buffer->max_y);
     }
     
     if (xoffset)
     {
-        buffer->x -= (f32)xoffset * atlas->line_gap;
+        buffer->x -= (s16)xoffset * atlas->line_gap;
         buffer->x = clamp(buffer->x, ctx->buffer_min_x, buffer->max_x);
     }
 }
@@ -138,7 +138,7 @@ void init_ted_context(Ted_Context* ctx, void* memory, u32 size)
     ctx->buffers = push_array(&ctx->arena, TED_MAX_BUFFERS, Ted_Buffer);
     ctx->bg_color = vec3{2.0f / 255.0f, 26.0f / 255.0f, 25.0f / 255.0f};
     ctx->text_color = vec3{255.0f / 255.0f, 220.0f / 255.0f, 194.0f / 255.0f};
-    ctx->buffer_min_x = 4.0f; // @Todo: make it customizable constant.
+    ctx->buffer_min_x = 4; // @Todo: make it customizable constant.
 
 #if TED_DEBUG
     ctx->debug_atlas = push_struct(&ctx->arena, Font_Atlas);
@@ -244,7 +244,7 @@ s16 create_buffer(Ted_Context* ctx)
     buffer->x = ctx->buffer_min_x;
 
     // @Cleanup: not fully correct y positioning, also fix similar issue during render update.
-    buffer->y = (f32)(ctx->window_h - atlas->font_size);
+    buffer->y = ctx->window_h - atlas->font_size;
 
     // @Cleanup: pass arena or smth.
     init_gap_buffer(buffer->display_buffer, 128);
@@ -298,29 +298,26 @@ void open_prev_buffer(Ted_Context* ctx)
 
 void increase_font_size(Ted_Context* ctx)
 {
-    const s16 old_line_gap = active_atlas(ctx)->line_gap;
-    
+    const s16 old_font_size = active_atlas(ctx)->font_size;
     ctx->active_atlas_idx++;
     ctx->active_atlas_idx = min(ctx->atlas_count - 1, ctx->active_atlas_idx);
 
     const auto* atlas = active_atlas(ctx);
     auto* buffer = active_buffer(ctx);
-    // @Cleanup: fix buffer y pos after font size change.
-    //buffer->y += (f32)(atlas->line_gap - old_line_gap);
-    //buffer->y = clamp(buffer->y, buffer->min_y, buffer->max_y);
+    const s16 font_size_delta = atlas->font_size - old_font_size;
+    buffer->y -= font_size_delta;
 }
 
 void decrease_font_size(Ted_Context* ctx)
 {
-    const s16 old_line_gap = active_atlas(ctx)->line_gap;
-    
+    const s16 old_font_size = active_atlas(ctx)->font_size;
     ctx->active_atlas_idx--;
     ctx->active_atlas_idx = max(0, ctx->active_atlas_idx);
 
     const auto* atlas = active_atlas(ctx);
     auto* buffer = active_buffer(ctx);
-    //buffer->y += (f32)(atlas->line_gap - old_line_gap);
-    //buffer->y = clamp(buffer->y, buffer->min_y, buffer->max_y);
+    const s16 font_size_delta = old_font_size - atlas->font_size;
+    buffer->y += font_size_delta;
 }
 
 static void render_batch_glyphs(Ted_Context* ctx, s32 count)
@@ -343,14 +340,16 @@ static void render(Ted_Context* ctx)
     glActiveTexture(GL_TEXTURE0);
     glUniform3f(glGetUniformLocation(ctx->render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
     
-    const u32 size = (u32)data_size(buffer->display_buffer);
-    const u32 prefix_size = (u32)prefix_data_size(buffer->display_buffer);
-    
-    s32 work_idx = 0;
-    f32 x = buffer->x;
-    f32 y = buffer->y;
-    
-    for (u32 i = 0, j = 0; i < size; ++i)
+    const s32 buffer_size = (s32)data_size(buffer->display_buffer);
+    const s32 prefix_size = (s32)prefix_data_size(buffer->display_buffer);
+    const s32 content_vert_size = buffer->line_count * atlas->line_gap;
+
+    u16 work_idx = 0;
+    s16 x = buffer->x;
+    s32 y = buffer->y;
+
+    buffer->line_count = 0;
+    for (s32 i = 0, j = 0; i < buffer_size; ++i)
     {
         char c;
         if (i < prefix_size) c = buffer->display_buffer->start[i];
@@ -360,6 +359,7 @@ static void render(Ted_Context* ctx)
         {
             x = buffer->x;
             y -= atlas->line_gap;
+            buffer->line_count++;
             continue;
         }
         
@@ -384,7 +384,7 @@ static void render(Ted_Context* ctx)
                 
         const f32 gw = (f32)atlas->font_size;
         const f32 gh = (f32)atlas->font_size;
-        const f32 gx = x + metric->offset_x;
+        const f32 gx = (f32)(x + metric->offset_x);
         const f32 gy = y - (gh + metric->offset_y);
         
         mat4* transform = ctx->render_ctx->transforms + work_idx;
@@ -405,11 +405,10 @@ static void render(Ted_Context* ctx)
     
     if (work_idx > 0) render_batch_glyphs(ctx, work_idx);
     
-    const f32 topmost_y = (f32)(ctx->window_h - atlas->font_size);
-    const f32 content_vert_size = fabsf(buffer->y - y);
+    const s16 topmost_y = ctx->window_h - atlas->font_size;
     buffer->max_y = topmost_y + content_vert_size;
     buffer->min_y = topmost_y;
-        
+    
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -445,7 +444,7 @@ void update_frame(Ted_Context* ctx)
     f32 y = (f32)(ctx->window_h - ctx->debug_atlas->line_gap);
     render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
-    debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nbuff_y=%.f\nbuff_max_y=%.f\nfont_size=%d",
+    debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nbuff_y=%d\nbuff_max_y=%d\nfont_size=%d",
                              cursor_pos(buffer->display_buffer),
                              total_data_size(buffer->display_buffer),
                              prefix_data_size(buffer->display_buffer),

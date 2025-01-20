@@ -1,2 +1,16 @@
-- Handle on/off curve points, hence bezier curves come up
+| Ted
+- Clip screen non-visible glyphs
+- Cursor visuals
+- Fix buffer y positioning
+  - Some glyph parts from upper line can be visible after scroll to topmost position
+  - Correct y position after font size change
+- Up/down arrow navigation and mouse click
+- Clipboard copy/paste
+- Region selection/cut/paste etc
+- Handle tab input and its different sizes
 
+| Framework
+- Make gap buffer use memory arena
+
+| Font
+- Handle on/off curve points, hence bezier curves come up

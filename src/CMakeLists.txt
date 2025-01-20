@@ -1,5 +1,5 @@
 add_executable(${PROJECT_NAME}
-                arena.h file.h font.h gap_buffer.h gl.h matrix.h memory.h memory_eater.h ted.h vector.h
+                arena.h file.h font.h gap_buffer.h gl.h matrix.h memory.h profile.h ted.h vector.h
                 main.cpp file.cpp font.cpp gap_buffer.cpp gl.cpp matrix.cpp memory.cpp ted.cpp vector.cpp)
 
 target_precompile_headers(${PROJECT_NAME} PUBLIC pch.h)

@@ -20,7 +20,7 @@ s64 data_size(const Gap_Buffer* buffer);
 s64 prefix_data_size(const Gap_Buffer* buffer);
 s64 suffix_data_size(const Gap_Buffer* buffer);
 
-void init(Gap_Buffer* buffer, s64 size);
+void init_gap_buffer(Gap_Buffer* buffer, s64 size);
 void free(Gap_Buffer* buffer);
 void expand(Gap_Buffer* buffer, s64 extra_size = 0);
 void set_cursor(Gap_Buffer* buffer, s64 pos);

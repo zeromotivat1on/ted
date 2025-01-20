@@ -65,7 +65,7 @@ s64 suffix_data_size(const Gap_Buffer* buffer)
     return buffer->end - buffer->gap_end;
 }
 
-void init(Gap_Buffer* buffer, s64 size)
+void init_gap_buffer(Gap_Buffer* buffer, s64 size)
 {
     const s64 total_size = size + GAP_EXPAND_SIZE;
     buffer->start = (char*)malloc(total_size);

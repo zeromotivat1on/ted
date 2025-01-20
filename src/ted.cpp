@@ -280,6 +280,8 @@ void set_active_buffer(Ted_Context* ctx, s16 buffer_idx)
 {
     if (buffer_idx >= ctx->buffer_count) return;
     ctx->active_buffer_idx = buffer_idx;
+
+    glfwSetWindowTitle(ctx->window, active_buffer(ctx)->path);
 }
 
 void open_next_buffer(Ted_Context* ctx)
@@ -287,6 +289,8 @@ void open_next_buffer(Ted_Context* ctx)
     ctx->active_buffer_idx++;
     if (ctx->active_buffer_idx >= ctx->buffer_count)
         ctx->active_buffer_idx = 0;
+
+    glfwSetWindowTitle(ctx->window, active_buffer(ctx)->path);
 }
 
 void open_prev_buffer(Ted_Context* ctx)
@@ -294,6 +298,8 @@ void open_prev_buffer(Ted_Context* ctx)
     ctx->active_buffer_idx--;
     if (ctx->active_buffer_idx < 0)
         ctx->active_buffer_idx = ctx->buffer_count - 1;
+
+    glfwSetWindowTitle(ctx->window, active_buffer(ctx)->path);
 }
 
 void increase_font_size(Ted_Context* ctx)
@@ -427,7 +433,6 @@ void update_frame(Ted_Context* ctx)
     glClearColor(ctx->bg_color.r, ctx->bg_color.g, ctx->bg_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glfwSetWindowTitle(ctx->window, active_buffer(ctx)->path);
     render(ctx);
 
 #if TED_DEBUG

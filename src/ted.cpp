@@ -307,6 +307,7 @@ void open_prev_buffer(Ted_Context* ctx)
     glfwSetWindowTitle(ctx->window, active_buffer(ctx)->path);
 }
 
+// @Fixme
 void increase_font_size(Ted_Context* ctx)
 {
     const s32 old_baseline_vert_offset = vert_offset_from_baseline(ctx->font, active_atlas(ctx));
@@ -359,7 +360,7 @@ static void render(Ted_Context* ctx)
     glActiveTexture(GL_TEXTURE0);
     glUniform3f(glGetUniformLocation(ctx->render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
     
-    const s32 buffer_size = (s32)data_size(buffer->display_buffer);
+    const s32 buffer_data_size = (s32)data_size(buffer->display_buffer);
     const s32 prefix_size = (s32)prefix_data_size(buffer->display_buffer);
     
     s16 work_idx = 0;
@@ -367,12 +368,28 @@ static void render(Ted_Context* ctx)
     s32 y = buffer->y;
 
     buffer->line_count = 0;
-    for (s32 i = 0, j = 0; i < buffer_size; ++i)
+    for (s32 i = 0, j = 0; i < buffer_data_size; ++i)
     {
+        if (y < 0) break;
+                
+        // @Cleanup: looks nasty, refactor.
         char c;
         if (i < prefix_size) c = buffer->display_buffer->start[i];
         else c = buffer->display_buffer->gap_end[j++];
-        
+
+        // @Cleanup: super straightforward text culling,
+        // don't like it, but it gets the job done for now, refactor later.
+        if (y > ctx->window_h)
+        {
+            if (c == '\n')
+            {
+                y -= atlas->new_line_offset;
+                buffer->line_count++;
+            }
+            
+            continue;
+        }
+
         if (c == '\n')
         {
             x = buffer->x;

@@ -18,10 +18,11 @@ int main()
     init_render_context(&ted);
     bake_font(&ted, 0, 127, 6, 128, 4);
     ted.active_atlas_idx = 6;
-    
-    set_active_buffer(&ted, create_buffer(&ted));
-    auto* buffer = active_buffer(&ted);
+
+    const s16 buffer_idx = create_buffer(&ted);
+    auto* buffer = ted.buffers + buffer_idx;
     buffer->path = "dummy";
+    set_active_buffer(&ted, buffer_idx);
     push_str(buffer->display_buffer,
              "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n"
              "abcdefghijklmnopqrstuvwxyz\n"

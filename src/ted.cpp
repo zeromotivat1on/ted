@@ -101,19 +101,21 @@ static void drop_callback(GLFWwindow* window, s32 count, const char** paths)
     SCOPE_TIMER("drop_callback");
     
     auto* ctx = (Ted_Context*)glfwGetWindowUserPointer(window);
+    s16 buffer_idx = 0;
     for (s32 i = 0; i < count; ++i)
     {
          // @Cleanup: maybe its a bit annoying to write such procedure every time
          // you want to open a new file and we should tweak api to have just one
          // function that opens file in new buffer.
-         const s16 buffer_idx = create_buffer(ctx);
-         set_active_buffer(ctx, buffer_idx);
+         buffer_idx = create_buffer(ctx);
          load_file_contents(ctx, buffer_idx, paths[i]);
 
-         auto* buffer = active_buffer(ctx);
+         auto* buffer = ctx->buffers + buffer_idx;
          set_cursor(buffer->display_buffer, 0);
          strcpy(buffer->path, paths[i]);
     }
+
+    set_active_buffer(ctx, buffer_idx);
 }
 
 Ted_Buffer* active_buffer(Ted_Context* ctx)

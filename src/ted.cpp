@@ -85,13 +85,13 @@ static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
 
     if (yoffset)
     {
-        buffer->y -= (s16)yoffset * atlas->line_gap;
-        buffer->y = clamp(buffer->y, buffer->min_y, buffer->max_y);
+        buffer->y -= (s16)yoffset * atlas->new_line_offset;
+        buffer->y = clamp(buffer->y, ctx->buffer_min_y, buffer->max_y);
     }
     
     if (xoffset)
     {
-        buffer->x -= (s16)xoffset * atlas->line_gap;
+        buffer->x -= (s16)xoffset * atlas->new_line_offset;
         buffer->x = clamp(buffer->x, ctx->buffer_min_x, buffer->max_x);
     }
 }
@@ -232,6 +232,11 @@ void bake_font(Ted_Context* ctx, u32 start_charcode, u32 end_charcode, s16 min_f
 #endif
 }
 
+static s32 vert_offset_from_baseline(const Font* font, const Font_Atlas* atlas)
+{
+    return (s32)((font->ascent + font->line_gap) * atlas->px_h_scale);
+}
+
 s16 create_buffer(Ted_Context* ctx)
 {
     if (ctx->buffer_count > TED_MAX_BUFFERS) return -1;
@@ -243,8 +248,8 @@ s16 create_buffer(Ted_Context* ctx)
     buffer->path = push_array(&ctx->arena, 128, char);
     buffer->x = ctx->buffer_min_x;
 
-    // @Cleanup: not fully correct y positioning, also fix similar issue during render update.
-    buffer->y = ctx->window_h - atlas->font_size;
+    // Place at topmost y position.
+    buffer->y = ctx->window_h - vert_offset_from_baseline(ctx->font, atlas);
 
     // @Cleanup: pass arena or smth.
     init_gap_buffer(buffer->display_buffer, 128);
@@ -304,26 +309,34 @@ void open_prev_buffer(Ted_Context* ctx)
 
 void increase_font_size(Ted_Context* ctx)
 {
-    const s16 old_font_size = active_atlas(ctx)->font_size;
+    const s32 old_baseline_vert_offset = vert_offset_from_baseline(ctx->font, active_atlas(ctx));
     ctx->active_atlas_idx++;
     ctx->active_atlas_idx = min(ctx->atlas_count - 1, ctx->active_atlas_idx);
 
     const auto* atlas = active_atlas(ctx);
-    auto* buffer = active_buffer(ctx);
-    const s16 font_size_delta = atlas->font_size - old_font_size;
-    buffer->y -= font_size_delta;
+    const s32 new_baseline_vert_offset = vert_offset_from_baseline(ctx->font, atlas);
+    const s32 offset_delta = new_baseline_vert_offset - old_baseline_vert_offset;
+    // @Cleanup: get rid of such buffer loops.
+    for (s16 i = 0; i < ctx->buffer_count; ++i)
+    {
+        ctx->buffers[i].y -= offset_delta;
+    }
 }
 
 void decrease_font_size(Ted_Context* ctx)
 {
-    const s16 old_font_size = active_atlas(ctx)->font_size;
+    const s32 old_baseline_vert_offset = vert_offset_from_baseline(ctx->font, active_atlas(ctx));
     ctx->active_atlas_idx--;
     ctx->active_atlas_idx = max(0, ctx->active_atlas_idx);
 
     const auto* atlas = active_atlas(ctx);
-    auto* buffer = active_buffer(ctx);
-    const s16 font_size_delta = old_font_size - atlas->font_size;
-    buffer->y += font_size_delta;
+    const s32 new_baseline_vert_offset = vert_offset_from_baseline(ctx->font, atlas);
+    const s32 offset_delta = old_baseline_vert_offset - new_baseline_vert_offset;
+    // @Cleanup: get rid of such buffer loops.
+    for (s16 i = 0; i < ctx->buffer_count; ++i)
+    {
+        ctx->buffers[i].y += offset_delta;
+    }
 }
 
 static void render_batch_glyphs(Ted_Context* ctx, s32 count)
@@ -348,10 +361,9 @@ static void render(Ted_Context* ctx)
     
     const s32 buffer_size = (s32)data_size(buffer->display_buffer);
     const s32 prefix_size = (s32)prefix_data_size(buffer->display_buffer);
-    const s32 content_vert_size = buffer->line_count * atlas->line_gap;
-
-    u16 work_idx = 0;
-    s16 x = buffer->x;
+    
+    s16 work_idx = 0;
+    s32 x = buffer->x;
     s32 y = buffer->y;
 
     buffer->line_count = 0;
@@ -364,7 +376,7 @@ static void render(Ted_Context* ctx)
         if (c == '\n')
         {
             x = buffer->x;
-            y -= atlas->line_gap;
+            y -= atlas->new_line_offset;
             buffer->line_count++;
             continue;
         }
@@ -411,10 +423,6 @@ static void render(Ted_Context* ctx)
     
     if (work_idx > 0) render_batch_glyphs(ctx, work_idx);
     
-    const s16 topmost_y = ctx->window_h - atlas->font_size;
-    buffer->max_y = topmost_y + content_vert_size;
-    buffer->min_y = topmost_y;
-    
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -429,6 +437,13 @@ static void copy(u32* dst, const char* src, s32 size)
 void update_frame(Ted_Context* ctx)
 {
     static f32 prev_time = (f32)glfwGetTime();
+
+    const auto* atlas = active_atlas(ctx);
+    // @Cleanup: calculate only on window resize?
+    ctx->buffer_min_y = ctx->window_h - vert_offset_from_baseline(ctx->font, atlas);
+
+    auto* buffer = active_buffer(ctx);    
+    buffer->max_y = ctx->buffer_min_y + (buffer->line_count * atlas->new_line_offset);
     
     glClearColor(ctx->bg_color.r, ctx->bg_color.g, ctx->bg_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -438,15 +453,13 @@ void update_frame(Ted_Context* ctx)
 #if TED_DEBUG
     static char debug_str[512];
     static u32 debug_text[512];
-    const auto* buffer = active_buffer(ctx);
-    const auto* atlas = active_atlas(ctx);
     
     s32 debug_str_size = sprintf(debug_str, "%.2fms %.ffps", ctx->dt * 1000.0f, 1 / ctx->dt);
     copy(debug_text, debug_str, debug_str_size);
 
     // @Cleanup: using line gap for x positioning is not the best idea.
-    f32 x = ctx->window_w - ctx->debug_atlas->line_gap * debug_str_size * 0.5f;
-    f32 y = (f32)(ctx->window_h - ctx->debug_atlas->line_gap);
+    f32 x = ctx->window_w - ctx->debug_atlas->new_line_offset * debug_str_size * 0.5f;
+    f32 y = (f32)(ctx->window_h - ctx->debug_atlas->new_line_offset);
     render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
     debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nbuff_y=%d\nbuff_max_y=%d\nfont_size=%d",
@@ -458,7 +471,7 @@ void update_frame(Ted_Context* ctx)
     copy(debug_text, debug_str, debug_str_size);
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 9.0f;
-    y -= ctx->debug_atlas->line_gap;
+    y -= ctx->debug_atlas->new_line_offset;
     render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 #endif
     

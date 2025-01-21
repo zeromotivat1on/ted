@@ -18,6 +18,8 @@ void init_font(Arena* arena, Font* font, const char* path)
 
     font->info = push_struct(arena, stbtt_fontinfo);
     stbtt_InitFont(font->info, data, stbtt_GetFontOffsetForIndex(data, 0));
+
+    stbtt_GetFontVMetrics(font->info, &font->ascent, &font->descent, &font->line_gap);
 }
 
 void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w, s32 win_h)
@@ -49,7 +51,7 @@ void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w,
     glBindVertexArray(0);
 }
 
-void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 start_charcode, u32 end_charcode, u16 font_size)
+void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 start_charcode, u32 end_charcode, s16 font_size)
 {
     const u32 charcode_count = end_charcode - start_charcode + 1;
     atlas->metrics = push_array(arena, charcode_count, Font_Glyph_Metric);
@@ -61,21 +63,19 @@ void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 star
     rescale_font_atlas(arena, font, atlas, font_size);
 }
 
-void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u16 font_size)
+void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, s16 font_size)
 {
     atlas->font_size = font_size;
-    
-    const f32 scale = stbtt_ScaleForPixelHeight(font->info, (f32)font_size);
-    const u32 charcode_count = atlas->end_charcode - atlas->start_charcode + 1;
 
+    const u32 charcode_count = atlas->end_charcode - atlas->start_charcode + 1;
+    const f32 scale = stbtt_ScaleForPixelHeight(font->info, (f32)font_size);
+    atlas->px_h_scale = scale;
+    atlas->new_line_offset = (s32)((font->ascent - font->descent + font->line_gap) * scale);
+    
     s32 max_layers;
     glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &max_layers);
     assert(charcode_count <= (u32)max_layers);
-    
-    s32 ascent, descent, line_gap;
-    stbtt_GetFontVMetrics(font->info, &ascent, &descent, &line_gap);
-    atlas->line_gap = (s16)((ascent - descent + line_gap) * scale);
-    
+
     // stbtt rasterizes glyphs as 8bpp, so tell open gl to use 1 byte per color channel.
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
@@ -158,7 +158,7 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
         if (c == '\n')
         {
             x_pos = x;
-            y_pos -= atlas->line_gap * scale;
+            y_pos -= atlas->new_line_offset * scale;
             continue;
         }
         

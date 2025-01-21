@@ -4,7 +4,7 @@
 #include "gap_buffer.h"
 
 int main()
-{    
+{
     void* vm_base_addr = vm_base_addr_val;
     void* vm_core = vm_reserve(vm_base_addr, GB(1));
 

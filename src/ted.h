@@ -15,16 +15,22 @@ inline constexpr s32 TED_MAX_BUFFERS = 64;
 inline constexpr s32 TED_MAX_BUFFER_SIZE = KB(256);
 inline constexpr s32 TED_MAX_ATLASES = 64;
 
+// @Todo
+struct Ted_Cursor
+{
+    s32 x;
+    s32 y;
+};
+
 struct Ted_Buffer
 {
     Arena arena; // is meant for buffer contents alone
     Gap_Buffer* display_buffer;
     char* path;
     s32 line_count;
-    s16 x;
+    s32 x;
     s32 y;
-    s16 max_x; // @Todo: depends on longest line size?
-    s16 min_y;
+    s32 max_x; // @Todo: depends on longest line size?
     s32 max_y;
 };
 
@@ -39,13 +45,14 @@ struct Ted_Context
     vec3 bg_color;
     vec3 text_color;
     f32 dt;
+    s32 buffer_min_x;
+    s32 buffer_min_y;
     s16 atlas_count;
     s16 active_atlas_idx;
     s16 buffer_count;
     s16 active_buffer_idx;
     s16 window_w;
     s16 window_h;
-    s16 buffer_min_x;
     
 #if TED_DEBUG
     Font_Atlas* debug_atlas;

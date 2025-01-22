@@ -30,7 +30,7 @@ struct Ted_Buffer
     s32 line_count;
     s32 x;
     s32 y;
-    s32 max_x; // @Todo: depends on longest line size?
+    s32 min_x; // @Todo: depends on longest line size?
     s32 max_y;
 };
 
@@ -45,7 +45,7 @@ struct Ted_Context
     vec3 bg_color;
     vec3 text_color;
     f32 dt;
-    s32 buffer_min_x;
+    s32 buffer_max_x;
     s32 buffer_min_y;
     s16 atlas_count;
     s16 active_atlas_idx;

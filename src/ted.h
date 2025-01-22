@@ -65,7 +65,7 @@ Font_Atlas* active_atlas(Ted_Context* ctx);
 void init_ted_context(Ted_Context* ctx, void* memory, u32 size);
 void destroy(Ted_Context* ctx);
 bool alive(Ted_Context* ctx);
-void create_window(Ted_Context* ctx, s16 win_w, s16 win_h);
+void create_window(Ted_Context* ctx, s16 w, s16 h, s16 x, s16 y);
 void load_font(Ted_Context* ctx, const char* path);
 void init_render_context(Ted_Context* ctx);
 void bake_font(Ted_Context* ctx, u32 start_charcode, u32 end_charcode, s16 min_font_size, s16 max_font_size, s16 font_size_stride);

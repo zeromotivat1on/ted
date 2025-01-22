@@ -13,7 +13,7 @@ int main()
 
     Ted_Context ted;
     init_ted_context(&ted, heap, heap_size);
-    create_window(&ted, 800, 600);
+    create_window(&ted, 800, 600, 4, 32);
     load_font(&ted, "C:/Windows/Fonts/Consola.ttf");
     init_render_context(&ted);
     bake_font(&ted, 0, 127, 6, 128, 4);

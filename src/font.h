@@ -30,7 +30,7 @@ struct Font_Atlas
     u32 texture_array; // glyph bitmaps array
     u32 start_charcode;
     u32 end_charcode;
-    f32 px_h_scale; // pixel height scale 
+    f32 px_h_scale; // glyph pixel height scale 
     s32 new_line_offset;
     s16 font_size; // also treated as size of each square glyph bitmap;
 };

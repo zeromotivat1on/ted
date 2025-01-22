@@ -86,13 +86,11 @@ static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
     if (yoffset)
     {
         buffer->y -= (s16)yoffset * atlas->new_line_offset;
-        buffer->y = clamp(buffer->y, ctx->buffer_min_y, buffer->max_y);
     }
     
     if (xoffset)
     {
         buffer->x -= (s16)xoffset * atlas->new_line_offset;
-        buffer->x = clamp(buffer->x, ctx->buffer_min_x, buffer->max_x);
     }
 }
 
@@ -163,7 +161,7 @@ bool alive(Ted_Context* ctx)
     return !glfwWindowShouldClose(ctx->window);
 }
 
-void create_window(Ted_Context* ctx, s16 win_w, s16 win_h)
+void create_window(Ted_Context* ctx, s16 w, s16 h, s16 x, s16 y)
 {
     assert(!ctx->window);
     
@@ -172,7 +170,7 @@ void create_window(Ted_Context* ctx, s16 win_w, s16 win_h)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    ctx->window = glfwCreateWindow(win_w, win_h, "", null, null);
+    ctx->window = glfwCreateWindow(w, h, "", null, null);
     if (!ctx->window)
     {
         printf("Failed to create GLFW window\n");
@@ -180,9 +178,10 @@ void create_window(Ted_Context* ctx, s16 win_w, s16 win_h)
         return;
     }
 
-    ctx->window_w = win_w;
-    ctx->window_h = win_h;
+    ctx->window_w = w;
+    ctx->window_h = h;
 
+    glfwSetWindowPos(ctx->window, x, y);
     glfwSetWindowUserPointer(ctx->window, ctx);
     
     glfwMakeContextCurrent(ctx->window);
@@ -248,10 +247,6 @@ s16 create_buffer(Ted_Context* ctx)
     buffer->arena = subarena(&ctx->arena, TED_MAX_BUFFER_SIZE);
     buffer->display_buffer = push_struct(&ctx->arena, Gap_Buffer);
     buffer->path = push_array(&ctx->arena, 128, char);
-    buffer->x = ctx->buffer_min_x;
-
-    // Place at topmost y position.
-    buffer->y = ctx->window_h - vert_offset_from_baseline(ctx->font, atlas);
 
     // @Cleanup: pass arena or smth.
     init_gap_buffer(buffer->display_buffer, 128);
@@ -312,34 +307,13 @@ void open_prev_buffer(Ted_Context* ctx)
 // @Fixme
 void increase_font_size(Ted_Context* ctx)
 {
-    const s32 old_baseline_vert_offset = vert_offset_from_baseline(ctx->font, active_atlas(ctx));
-    ctx->active_atlas_idx++;
-    ctx->active_atlas_idx = min(ctx->atlas_count - 1, ctx->active_atlas_idx);
-
-    const auto* atlas = active_atlas(ctx);
-    const s32 new_baseline_vert_offset = vert_offset_from_baseline(ctx->font, atlas);
-    const s32 offset_delta = new_baseline_vert_offset - old_baseline_vert_offset;
-    // @Cleanup: get rid of such buffer loops.
-    for (s16 i = 0; i < ctx->buffer_count; ++i)
-    {
-        ctx->buffers[i].y -= offset_delta;
-    }
+    ctx->active_atlas_idx = min(ctx->atlas_count - 1, ctx->active_atlas_idx + 1);
 }
 
+// @Fixme
 void decrease_font_size(Ted_Context* ctx)
 {
-    const s32 old_baseline_vert_offset = vert_offset_from_baseline(ctx->font, active_atlas(ctx));
-    ctx->active_atlas_idx--;
-    ctx->active_atlas_idx = max(0, ctx->active_atlas_idx);
-
-    const auto* atlas = active_atlas(ctx);
-    const s32 new_baseline_vert_offset = vert_offset_from_baseline(ctx->font, atlas);
-    const s32 offset_delta = old_baseline_vert_offset - new_baseline_vert_offset;
-    // @Cleanup: get rid of such buffer loops.
-    for (s16 i = 0; i < ctx->buffer_count; ++i)
-    {
-        ctx->buffers[i].y += offset_delta;
-    }
+    ctx->active_atlas_idx = max(0, ctx->active_atlas_idx - 1);
 }
 
 static void render_batch_glyphs(Ted_Context* ctx, s32 count)
@@ -461,8 +435,11 @@ void update_frame(Ted_Context* ctx)
     // @Cleanup: calculate only on window resize?
     ctx->buffer_min_y = ctx->window_h - vert_offset_from_baseline(ctx->font, atlas);
 
+    // @Todo: update all opened buffers (feature to come).
     auto* buffer = active_buffer(ctx);    
     buffer->max_y = ctx->buffer_min_y + (buffer->line_count * atlas->new_line_offset);
+    buffer->x = clamp(buffer->x, ctx->buffer_min_x, buffer->max_x);
+    buffer->y = clamp(buffer->y, ctx->buffer_min_y, buffer->max_y);
     
     glClearColor(ctx->bg_color.r, ctx->bg_color.g, ctx->bg_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -481,12 +458,12 @@ void update_frame(Ted_Context* ctx)
     f32 y = (f32)(ctx->window_h - ctx->debug_atlas->new_line_offset);
     render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
-    debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nbuff_y=%d\nbuff_max_y=%d\nfont_size=%d",
+    debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nbuff_y=%d\nbuff_min_y=%d\nbuff_max_y=%d\nfont_size=%d",
                              cursor_pos(buffer->display_buffer),
                              total_data_size(buffer->display_buffer),
                              prefix_data_size(buffer->display_buffer),
                              buffer->display_buffer->gap_end - buffer->display_buffer->start,
-                             buffer->y, buffer->max_y, atlas->font_size);
+                             buffer->y, ctx->buffer_min_y, buffer->max_y, atlas->font_size);
     copy(debug_text, debug_str, debug_str_size);
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 9.0f;

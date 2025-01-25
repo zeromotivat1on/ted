@@ -1,7 +1,9 @@
 #pragma once
 
+#include "file.h"
 #include "arena.h"
 #include "vector.h"
+#include "gap_buffer.h"
 
 struct Font;
 struct Font_Atlas;
@@ -12,8 +14,11 @@ struct GLFWwindow;
 #define TED_DEBUG 1
 
 inline constexpr s32 TED_MAX_BUFFERS = 64;
-inline constexpr s32 TED_MAX_BUFFER_SIZE = KB(256);
 inline constexpr s32 TED_MAX_ATLASES = 64;
+inline constexpr s32 TED_MAX_LINE_COUNT = 32 * 1024;
+inline constexpr s32 TED_MAX_FILE_SIZE = KB(256);
+inline constexpr s32 TED_MAX_FILE_NAME_SIZE = 256;
+inline constexpr s32 TED_MAX_BUFFER_SIZE = TED_MAX_FILE_NAME_SIZE + TED_MAX_FILE_SIZE + (TED_MAX_LINE_COUNT * sizeof(s32));
 
 // @Todo
 struct Ted_Cursor
@@ -24,10 +29,11 @@ struct Ted_Cursor
 
 struct Ted_Buffer
 {
-    Arena arena; // is meant for buffer contents alone
-    Gap_Buffer* display_buffer;
-    char* path;
-    s32 line_count;
+    Arena arena; // is meant for buffer metadata and contents
+    Gap_Buffer display_buffer;
+    char* path; // path used to load file contents
+    s32* new_line_offsets;
+    s32 new_line_count;
     s32 x;
     s32 y;
     s32 min_x; // @Todo: depends on longest line size?
@@ -77,4 +83,8 @@ void open_next_buffer(Ted_Context* ctx);
 void open_prev_buffer(Ted_Context* ctx);
 void increase_font_size(Ted_Context* ctx);
 void decrease_font_size(Ted_Context* ctx);
+void push_char(Ted_Context* ctx, s16 buffer_idx, char c);
+void push_str(Ted_Context* ctx, s16 buffer_idx, const char* str, s32 size);
+void delete_char(Ted_Context* ctx, s16 buffer_idx);
+void delete_char_overwrite(Ted_Context* ctx, s16 buffer_idx);
 void update_frame(Ted_Context* ctx);

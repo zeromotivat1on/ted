@@ -20,10 +20,8 @@ int main()
     ted.active_atlas_idx = 6;
 
     const s16 buffer_idx = create_buffer(&ted);
-    auto* buffer = ted.buffers + buffer_idx;
-    buffer->path = "dummy";
     set_active_buffer(&ted, buffer_idx);
-    push_str(buffer->display_buffer,
+    push_str(&ted, buffer_idx,
              "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n"
              "abcdefghijklmnopqrstuvwxyz\n"
              "`1234567890-=[]\\;',./\n"

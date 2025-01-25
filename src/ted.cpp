@@ -4,12 +4,10 @@
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
 #include "ted.h"
-#include "file.h"
 #include "font.h"
 #include "arena.h"
 #include "matrix.h"
 #include "profile.h"
-#include "gap_buffer.h"
 
 static void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
 {
@@ -35,8 +33,15 @@ static void char_callback(GLFWwindow* window, u32 character)
     //printf("Window char (%c) as key (%u)\n", character, character);
 
     auto* ctx = (Ted_Context*)glfwGetWindowUserPointer(window);
-    auto* buffer = ctx->buffers + ctx->active_buffer_idx;
-    push_char(buffer->display_buffer, (char)character);
+    push_char(ctx, ctx->active_buffer_idx, (char)character);
+}
+
+static void overwrite_file(Arena* arena, const Ted_Buffer* buffer)
+{
+    const s64 buffer_data_size = data_size(&buffer->display_buffer);
+    char* utf8 = push_array(arena, buffer_data_size, char);
+    fill_utf8(&buffer->display_buffer, utf8);
+    overwrite_file(buffer->path, (u8*)utf8, (s32)buffer_data_size);
 }
 
 static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods)
@@ -44,37 +49,63 @@ static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, 
     //printf("Window key (%d) as char (%c)\n", key, key);
 
     auto* ctx = (Ted_Context*)glfwGetWindowUserPointer(window);
-    auto* buffer = active_buffer(ctx);
-    
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-  
-    if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        push_char(buffer->display_buffer, '\n');
+    const s16 buffer_idx = ctx->active_buffer_idx;
+    auto* buffer = ctx->buffers + buffer_idx;
 
-    if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        delete_char(buffer->display_buffer);
-    
-    if (key == GLFW_KEY_DELETE && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        delete_char_overwrite(buffer->display_buffer);
+    switch (key)
+    {
+    case GLFW_KEY_ESCAPE: 
+        if (action == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
+        break;
 
-    if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT) && !(mods & GLFW_MOD_ALT))
-        move_cursor(buffer->display_buffer, -1);
+    case GLFW_KEY_S:
+        if (action == GLFW_PRESS && mods & GLFW_MOD_CONTROL)
+            overwrite_file(&ctx->arena, buffer);
+        break;
         
-    if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT) && !(mods & GLFW_MOD_ALT))
-        move_cursor(buffer->display_buffer, 1);
-
-    if (key == GLFW_KEY_EQUAL && (action == GLFW_PRESS || action == GLFW_REPEAT) && mods & GLFW_MOD_CONTROL)
-        increase_font_size(ctx);
-
-    if (key == GLFW_KEY_MINUS && (action == GLFW_PRESS || action == GLFW_REPEAT) && mods & GLFW_MOD_CONTROL)
-        decrease_font_size(ctx);
-
-     if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT) && mods & GLFW_MOD_ALT)
-        open_next_buffer(ctx);
-
-     if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT) && mods & GLFW_MOD_ALT)
-        open_prev_buffer(ctx);
+    case GLFW_KEY_ENTER:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+            push_char(ctx, buffer_idx, '\n');
+        break;
+        
+    case GLFW_KEY_BACKSPACE:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+            delete_char(ctx, buffer_idx);
+        break;
+        
+    case GLFW_KEY_DELETE:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+            delete_char_overwrite(ctx, buffer_idx);
+        break;
+        
+    case GLFW_KEY_LEFT:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (mods & GLFW_MOD_ALT) open_prev_buffer(ctx);
+            else move_cursor(&buffer->display_buffer, -1);
+        }
+        
+        break;
+        
+    case GLFW_KEY_RIGHT:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (mods & GLFW_MOD_ALT) open_next_buffer(ctx);
+            else move_cursor(&buffer->display_buffer, 1);
+        }
+        
+        break;
+        
+    case GLFW_KEY_EQUAL:
+        if ((action == GLFW_PRESS || action == GLFW_REPEAT) && mods & GLFW_MOD_CONTROL)
+            increase_font_size(ctx);
+        break;
+        
+    case GLFW_KEY_MINUS:
+        if ((action == GLFW_PRESS || action == GLFW_REPEAT) && mods & GLFW_MOD_CONTROL)
+            decrease_font_size(ctx);
+        break;
+    }
 }
 
 static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
@@ -95,7 +126,7 @@ static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
 
 static void drop_callback(GLFWwindow* window, s32 count, const char** paths)
 {
-    SCOPE_TIMER("drop_callback");
+    SCOPE_TIMER(__FUNCTION__);
     
     auto* ctx = (Ted_Context*)glfwGetWindowUserPointer(window);
     s16 buffer_idx = 0;
@@ -106,10 +137,6 @@ static void drop_callback(GLFWwindow* window, s32 count, const char** paths)
          // function that opens file in new buffer.
          buffer_idx = create_buffer(ctx);
          load_file_contents(ctx, buffer_idx, paths[i]);
-
-         auto* buffer = ctx->buffers + buffer_idx;
-         set_cursor(buffer->display_buffer, 0);
-         strcpy(buffer->path, paths[i]);
     }
 
     set_active_buffer(ctx, buffer_idx);
@@ -148,7 +175,7 @@ void destroy(Ted_Context* ctx)
 {    
     // @Cleanup: these frees should not be here after gap buffer will use memory arena.
     for (s16 i = 0; i < ctx->buffer_count; ++i)
-        free(ctx->buffers[i].display_buffer);
+        free(&ctx->buffers[i].display_buffer);
 
     clear(&ctx->arena);
     glfwTerminate();
@@ -239,14 +266,34 @@ s16 create_buffer(Ted_Context* ctx)
     auto* atlas = active_atlas(ctx);
     auto* buffer = ctx->buffers + ctx->buffer_count;
     buffer->arena = subarena(&ctx->arena, TED_MAX_BUFFER_SIZE);
-    buffer->display_buffer = push_struct(&ctx->arena, Gap_Buffer);
-    buffer->path = push_array(&ctx->arena, 128, char);
+    buffer->path = push_array(&buffer->arena, 256, char);
+    buffer->new_line_offsets = push_array(&buffer->arena, TED_MAX_LINE_COUNT, s32);
     buffer->x = ctx->buffer_max_x;
-    
+
+    strcpy(buffer->path, "dummy");
+        
     // @Cleanup: pass arena or smth.
-    init_gap_buffer(buffer->display_buffer, 128);
+    init_gap_buffer(&buffer->display_buffer, 128);
     
     return ctx->buffer_count++;
+}
+
+static s32 count_new_line_offsets(const char* data, s32 size, s32* offsets, s32* count)
+{
+    s32 n = 0;
+    s32 max_line_length = 0;
+    for (s32 i = 0; i < size; ++i)
+    {
+        if (data[i] == '\n')
+        {
+            offsets[n++] = i;
+            const s32 line_length = n < 1 ? offsets[n] : offsets[n] - offsets[n - 1];
+            max_line_length = max(max_line_length, line_length);
+        }
+    }
+    
+    *count = n;
+    return max_line_length;
 }
 
 void load_file_contents(Ted_Context* ctx, s16 buffer_idx, const char* path)
@@ -254,13 +301,16 @@ void load_file_contents(Ted_Context* ctx, s16 buffer_idx, const char* path)
     if (buffer_idx >= ctx->buffer_count) return;
 
     auto* buffer = ctx->buffers + buffer_idx;
-    clear(&buffer->arena);
-    
-    s32 size = 0;
+    strcpy(buffer->path, path);
+
+    s32 size = 0; // includes null-termination character
     u8* data = read_entire_file(&buffer->arena, path, &size);
 
+    count_new_line_offsets((char*)data, size - 1, buffer->new_line_offsets, &buffer->new_line_count);
+    
     // @Todo: handle non-ascii?
-    push_str(buffer->display_buffer, (char*)data, size);
+    push_str(&buffer->display_buffer, (char*)data, size - 1);
+    set_cursor(&buffer->display_buffer, 0);
 }
 
 void kill_buffer(Ted_Context* ctx, s16 buffer_idx)
@@ -270,7 +320,7 @@ void kill_buffer(Ted_Context* ctx, s16 buffer_idx)
     auto* buffer = ctx->buffers + buffer_idx;
     clear(&buffer->arena);
     // @Cleanup: this gap buffer free should be removed as arena must handle buffer memory.
-    free(buffer->display_buffer);
+    free(&buffer->display_buffer);
 }
 
 void set_active_buffer(Ted_Context* ctx, s16 buffer_idx)
@@ -311,6 +361,48 @@ void decrease_font_size(Ted_Context* ctx)
     ctx->active_atlas_idx = max(0, ctx->active_atlas_idx - 1);
 }
 
+void push_char(Ted_Context* ctx, s16 buffer_idx, char c)
+{
+    assert(buffer_idx < ctx->buffer_count);
+    auto* buffer = ctx->buffers + buffer_idx;
+    push_char(&buffer->display_buffer, c);
+
+    assert(buffer->new_line_count < TED_MAX_LINE_COUNT);
+    // @Cleanup: when new lines are added/removed, we need
+    // to sort new_line_offsets in ascending order, so index will
+    // be equal to line number - 1, as it was after initial load_file_contents.
+    if (c == '\n') buffer->new_line_offsets[buffer->new_line_count++] = (s32)cursor_pos(&buffer->display_buffer);
+}
+
+void push_str(Ted_Context* ctx, s16 buffer_idx, const char* str, s32 size)
+{
+    assert(buffer_idx < ctx->buffer_count);
+    auto* buffer = ctx->buffers + buffer_idx;
+    push_str(&buffer->display_buffer, str, size);
+
+    s32 new_line_count = 0;
+    count_new_line_offsets(str, size, buffer->new_line_offsets + buffer->new_line_count, &new_line_count);
+
+    buffer->new_line_count += new_line_count;
+    assert(buffer->new_line_count < TED_MAX_LINE_COUNT);
+}
+
+void delete_char(Ted_Context* ctx, s16 buffer_idx)
+{
+    assert(buffer_idx < ctx->buffer_count);
+    auto* buffer = ctx->buffers + buffer_idx;
+    delete_char(&buffer->display_buffer);
+    if (*buffer->display_buffer.cursor == '\n') buffer->new_line_count--;
+}
+
+void delete_char_overwrite(Ted_Context* ctx, s16 buffer_idx)
+{
+    assert(buffer_idx < ctx->buffer_count);
+    auto* buffer = ctx->buffers + buffer_idx;
+    if (*buffer->display_buffer.gap_end == '\n') buffer->new_line_count--;
+    delete_char_overwrite(&buffer->display_buffer);
+}
+
 static void render_batch_glyphs(Ted_Context* ctx, s32 count)
 {
     glUniformMatrix4fv(glGetUniformLocation(ctx->render_ctx->program, "u_transforms"), count, GL_FALSE, (f32*)ctx->render_ctx->transforms);
@@ -331,33 +423,27 @@ static void render(Ted_Context* ctx)
     glActiveTexture(GL_TEXTURE0);
     glUniform3f(glGetUniformLocation(ctx->render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
     
-    const s32 buffer_data_size = (s32)data_size(buffer->display_buffer);
-    const s32 prefix_size = (s32)prefix_data_size(buffer->display_buffer);
+    const s32 buffer_data_size = (s32)data_size(&buffer->display_buffer);
+    const s32 prefix_size = (s32)prefix_data_size(&buffer->display_buffer);
     
     s16 work_idx = 0;
     s32 x = buffer->x;
     s32 y = buffer->y;
 
-    buffer->line_count = 0;
     for (s32 i = 0, j = 0; i < buffer_data_size; ++i)
     {
         if (y < 0) break;
                 
         // @Cleanup: looks nasty, refactor.
         char c;
-        if (i < prefix_size) c = buffer->display_buffer->start[i];
-        else c = buffer->display_buffer->gap_end[j++];
+        if (i < prefix_size) c = buffer->display_buffer.start[i];
+        else c = buffer->display_buffer.gap_end[j++];
 
         // @Cleanup: super straightforward text culling,
         // don't like it, but it gets the job done for now, refactor later.
         if (y > ctx->window_h)
         {
-            if (c == '\n')
-            {
-                y -= atlas->new_line_offset;
-                buffer->line_count++;
-            }
-            
+            if (c == '\n') y -= atlas->new_line_offset;
             continue;
         }
 
@@ -365,7 +451,6 @@ static void render(Ted_Context* ctx)
         {
             x = buffer->x;
             y -= atlas->new_line_offset;
-            buffer->line_count++;
             continue;
         }
         
@@ -438,7 +523,7 @@ void update_frame(Ted_Context* ctx)
     // @Todo: update all opened buffers (feature to come).
     auto* buffer = active_buffer(ctx);
     buffer->min_x = -ctx->window_w; // @Todo: should be equal to longest line length
-    buffer->max_y = ctx->buffer_min_y + (buffer->line_count * atlas->new_line_offset);
+    buffer->max_y = ctx->buffer_min_y + (buffer->new_line_count * atlas->new_line_offset);
     buffer->x = clamp(buffer->x, buffer->min_x, ctx->buffer_max_x);
     buffer->y = clamp(buffer->y, ctx->buffer_min_y, buffer->max_y);
     
@@ -459,12 +544,13 @@ void update_frame(Ted_Context* ctx)
     f32 y = (f32)(ctx->window_h - ctx->debug_atlas->new_line_offset);
     render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
-    debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nxy=(%d, %d)\nmin_xy=(%d, %d)\nmax_xy=(%d, %d)\nfont_size=%d",
-                             cursor_pos(buffer->display_buffer),
-                             total_data_size(buffer->display_buffer),
-                             prefix_data_size(buffer->display_buffer),
-                             buffer->display_buffer->gap_end - buffer->display_buffer->start,
-                             buffer->x, buffer->y, buffer->min_x, ctx->buffer_min_y, ctx->buffer_max_x, buffer->max_y, atlas->font_size);
+    const char cursor_c = *buffer->display_buffer.cursor;
+    debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nxy=(%d, %d)\nmin_xy=(%d, %d)\nmax_xy=(%d, %d)\nnew_line_count=%d\nfont_size=%d",
+                             cursor_pos(&buffer->display_buffer),
+                             total_data_size(&buffer->display_buffer),
+                             prefix_data_size(&buffer->display_buffer),
+                             buffer->display_buffer.gap_end - buffer->display_buffer.start,
+                             buffer->x, buffer->y, buffer->min_x, ctx->buffer_min_y, ctx->buffer_max_x, buffer->max_y, buffer->new_line_count, atlas->font_size);
     copy(debug_text, debug_str, debug_str_size);
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;

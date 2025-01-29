@@ -4,6 +4,7 @@
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
 #include "ted.h"
+#include "gl.h"
 #include "font.h"
 #include "arena.h"
 #include "matrix.h"
@@ -38,10 +39,10 @@ static void char_callback(GLFWwindow* window, u32 character)
 
 static void overwrite_file(Arena* arena, const Ted_Buffer* buffer)
 {
-    const s64 buffer_data_size = data_size(&buffer->display_buffer);
+    const s32 buffer_data_size = data_size(&buffer->display_buffer);
     char* utf8 = push_array(arena, buffer_data_size, char);
     fill_utf8(&buffer->display_buffer, utf8);
-    overwrite_file(buffer->path, (u8*)utf8, (s32)buffer_data_size);
+    overwrite_file(buffer->path, (u8*)utf8, buffer_data_size);
 }
 
 static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods)
@@ -82,7 +83,7 @@ static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, 
         if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
             if (mods & GLFW_MOD_ALT) open_prev_buffer(ctx);
-            else move_cursor(&buffer->display_buffer, -1);
+            else move_cursor_horizontally(ctx, buffer_idx, -1);
         }
         
         break;
@@ -91,7 +92,7 @@ static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, 
         if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
             if (mods & GLFW_MOD_ALT) open_next_buffer(ctx);
-            else move_cursor(&buffer->display_buffer, 1);
+            else move_cursor_horizontally(ctx, buffer_idx, 1);
         }
         
         break;
@@ -120,7 +121,7 @@ static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
             buffer->x += (s16)yoffset * atlas->font_size;
         else
-            buffer->y -= (s16)yoffset * atlas->new_line_offset;
+            buffer->y -= (s16)yoffset * atlas->line_height;
     }
 }
 
@@ -226,6 +227,31 @@ void load_font(Ted_Context* ctx, const char* path)
     init_font(&ctx->arena, ctx->font, path);
 }
 
+static void init_cursor(Arena* arena, Ted_Cursor* cursor)
+{
+    //cursor->program = gl_load_program(arena, DIR_SHADERS "cursor.vs", DIR_SHADERS "cursor.fs");
+
+    glGenVertexArrays(1, &cursor->vao);
+    glGenBuffers(1, &cursor->vbo);
+    
+    glBindVertexArray(cursor->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, cursor->vbo);
+
+    f32 vertices[4 * 2] = {
+        0.0f, 1.0f,
+        0.0f, 0.0f,
+        1.0f, 1.0f,
+        1.0f, 0.0f,
+    };
+    
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*)0);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
 void init_render_context(Ted_Context* ctx)
 {
     assert(ctx->window);
@@ -267,38 +293,21 @@ s16 create_buffer(Ted_Context* ctx)
     auto* buffer = ctx->buffers + ctx->buffer_count;
     buffer->arena = subarena(&ctx->arena, TED_MAX_BUFFER_SIZE);
     buffer->path = push_array(&buffer->arena, 256, char);
-    buffer->new_line_offsets = push_array(&buffer->arena, TED_MAX_LINE_COUNT, s32);
+    buffer->line_lengths = push_array(&buffer->arena, TED_MAX_LINE_COUNT, s32);
     buffer->x = ctx->buffer_max_x;
 
     strcpy(buffer->path, "dummy");
         
     // @Cleanup: pass arena or smth.
     init_gap_buffer(&buffer->display_buffer, 128);
-    
-    return ctx->buffer_count++;
-}
+    init_cursor(&buffer->arena, &buffer->cursor);
 
-static s32 count_new_line_offsets(const char* data, s32 size, s32* offsets, s32* count)
-{
-    s32 n = 0;
-    s32 max_line_length = 0;
-    for (s32 i = 0; i < size; ++i)
-    {
-        if (data[i] == '\n')
-        {
-            offsets[n++] = i;
-            const s32 line_length = n < 1 ? offsets[n] : offsets[n] - offsets[n - 1];
-            max_line_length = max(max_line_length, line_length);
-        }
-    }
-    
-    *count = n;
-    return max_line_length;
+    return ctx->buffer_count++;
 }
 
 void load_file_contents(Ted_Context* ctx, s16 buffer_idx, const char* path)
 {
-    if (buffer_idx >= ctx->buffer_count) return;
+    assert(buffer_idx < ctx->buffer_count);
 
     auto* buffer = ctx->buffers + buffer_idx;
     strcpy(buffer->path, path);
@@ -306,16 +315,14 @@ void load_file_contents(Ted_Context* ctx, s16 buffer_idx, const char* path)
     s32 size = 0; // includes null-termination character
     u8* data = read_entire_file(&buffer->arena, path, &size);
 
-    count_new_line_offsets((char*)data, size - 1, buffer->new_line_offsets, &buffer->new_line_count);
-    
     // @Todo: handle non-ascii?
-    push_str(&buffer->display_buffer, (char*)data, size - 1);
-    set_cursor(&buffer->display_buffer, 0);
+    push_str(ctx, buffer_idx, (char*)data, size - 1);
+    set_cursor(ctx, buffer_idx, 0, 0);
 }
 
 void kill_buffer(Ted_Context* ctx, s16 buffer_idx)
 {
-    if (buffer_idx >= ctx->buffer_count) return;
+    assert(buffer_idx < ctx->buffer_count);
 
     auto* buffer = ctx->buffers + buffer_idx;
     clear(&buffer->arena);
@@ -325,7 +332,7 @@ void kill_buffer(Ted_Context* ctx, s16 buffer_idx)
 
 void set_active_buffer(Ted_Context* ctx, s16 buffer_idx)
 {
-    if (buffer_idx >= ctx->buffer_count) return;
+    assert(buffer_idx < ctx->buffer_count);
     ctx->active_buffer_idx = buffer_idx;
 
     glfwSetWindowTitle(ctx->window, active_buffer(ctx)->path);
@@ -364,49 +371,215 @@ void decrease_font_size(Ted_Context* ctx)
 void push_char(Ted_Context* ctx, s16 buffer_idx, char c)
 {
     assert(buffer_idx < ctx->buffer_count);
+    
     auto* buffer = ctx->buffers + buffer_idx;
     push_char(&buffer->display_buffer, c);
+    
+    if (c == '\n')
+    {
+        if (buffer->last_line_idx >= TED_MAX_LINE_COUNT)
+        {
+            printf("Reached max line count (%d)", TED_MAX_LINE_COUNT);
+            return;
+        }
 
-    assert(buffer->new_line_count < TED_MAX_LINE_COUNT);
-    // @Cleanup: when new lines are added/removed, we need
-    // to sort new_line_offsets in ascending order, so index will
-    // be equal to line number - 1, as it was after initial load_file_contents.
-    if (c == '\n') buffer->new_line_offsets[buffer->new_line_count++] = (s32)cursor_pos(&buffer->display_buffer);
+        if (buffer->cursor.row == buffer->last_line_idx)
+            buffer->line_lengths[buffer->cursor.row] += 1;
+
+        // @Speed: array is not the best choice for storing line sizes
+        // due to need to constantly move them like this, same during delete.
+        if (buffer->cursor.row < buffer->last_line_idx)
+        {
+            s32* dst = buffer->line_lengths + buffer->cursor.row + 1;
+            const s32* src = buffer->line_lengths + buffer->cursor.row;
+            const s32* last = buffer->line_lengths + buffer->last_line_idx;
+            const s32 size = (last - src + 1) * sizeof(s32);
+            memmove(dst, src, size);
+        }
+        
+        buffer->cursor.row++;
+        buffer->cursor.col = 0;
+        
+        buffer->line_lengths[buffer->cursor.row] = 0;
+        buffer->last_line_idx++;
+
+        if (buffer->cursor.row < buffer->last_line_idx)
+            buffer->line_lengths[buffer->cursor.row] = 1;
+    }
+    else
+    {
+        buffer->line_lengths[buffer->cursor.row] += 1;
+        buffer->cursor.col++;
+    }    
 }
 
 void push_str(Ted_Context* ctx, s16 buffer_idx, const char* str, s32 size)
 {
-    assert(buffer_idx < ctx->buffer_count);
-    auto* buffer = ctx->buffers + buffer_idx;
-    push_str(&buffer->display_buffer, str, size);
+    // @Cleanup: brute-force implementation for now.
+    // @Speed: this will be very slow if string has several lines.
+    for (s32 i = 0; i < size; ++i)
+        push_char(ctx, buffer_idx, str[i]);
+}
 
-    s32 new_line_count = 0;
-    count_new_line_offsets(str, size, buffer->new_line_offsets + buffer->new_line_count, &new_line_count);
+static void shift_array_s32(s32* data, s32 data_count, s32 start_idx, s32 delta, s32 shift_count)
+{ 
+    for (s32 i = 0; i < shift_count; ++i)
+    {
+        const s32 src_idx = start_idx + i;
+        const s32 dst_idx = src_idx + delta;
 
-    buffer->new_line_count += new_line_count;
-    assert(buffer->new_line_count < TED_MAX_LINE_COUNT);
+        assert(dst_idx > 0);
+        assert(src_idx > 0);
+        assert(dst_idx < data_count);
+        assert(src_idx < data_count);
+
+        data[dst_idx] = data[src_idx];
+        data[src_idx] = 0;
+    }
 }
 
 void delete_char(Ted_Context* ctx, s16 buffer_idx)
 {
     assert(buffer_idx < ctx->buffer_count);
+    
     auto* buffer = ctx->buffers + buffer_idx;
-    delete_char(&buffer->display_buffer);
-    if (*buffer->display_buffer.cursor == '\n') buffer->new_line_count--;
+    auto* display_buffer = &buffer->display_buffer;
+
+    const char c_deleted = delete_char(display_buffer);
+    if (c_deleted == '\n')
+    {
+        const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row];
+        printf("deleted_line_length (%d)", deleted_line_length);
+        //buffer->line_lengths[buffer->cursor.row] = 0; // we are done with it
+
+        
+        // @Todo: fix line length shift (and in other places too, mb make separate function).
+        if (buffer->cursor.row < buffer->last_line_idx)
+        {
+            s32* dst = buffer->line_lengths + buffer->cursor.row;
+            const s32* src = buffer->line_lengths + buffer->cursor.row + 1;
+            const s32* last = buffer->line_lengths + buffer->last_line_idx;
+            const s32 size = (last - src + 1) * sizeof(s32);
+            //printf("shift dst(%d) src(%d) last(%d)", dst - buffer->line_lengths, src - buffer->line_lengths, last - buffer->line_lengths);
+            memmove(dst, src, size);
+            
+            buffer->line_lengths[buffer->last_line_idx] = 0;
+        }
+        
+
+        //const s32 line_count = buffer->last_line_idx + 1;
+        //const s32 start_idx = buffer->cursor.row + 1;
+        //shift_array_s32(buffer->line_lengths, line_count, start_idx, -1, line_count - start_idx);
+
+        buffer->cursor.row--;
+        buffer->line_lengths[buffer->cursor.row] -= 1; // new line character
+        buffer->cursor.col = buffer->line_lengths[buffer->cursor.row];
+        buffer->line_lengths[buffer->cursor.row] += deleted_line_length;
+        
+        buffer->last_line_idx--;
+    }
+    else if (c_deleted != INVALID_CHAR)
+    {
+        buffer->line_lengths[buffer->cursor.row] -= 1;
+        buffer->cursor.col--;
+    }
 }
 
 void delete_char_overwrite(Ted_Context* ctx, s16 buffer_idx)
 {
     assert(buffer_idx < ctx->buffer_count);
+    
     auto* buffer = ctx->buffers + buffer_idx;
-    if (*buffer->display_buffer.gap_end == '\n') buffer->new_line_count--;
-    delete_char_overwrite(&buffer->display_buffer);
+    auto* display_buffer = &buffer->display_buffer;
+
+    const char c_deleted = delete_char_overwrite(display_buffer);
+    // @Test: verify implementation.
+    if (c_deleted == '\n')
+    {
+        const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row];
+
+        s32* dst = buffer->line_lengths + buffer->cursor.row;
+        const s32* src = buffer->line_lengths + buffer->cursor.row + 1;
+        const s32* last = buffer->line_lengths + buffer->last_line_idx;
+        const s32 size = (last - src) * sizeof(s32);
+        memmove(dst, src, size);
+
+        buffer->line_lengths[buffer->cursor.row] -= 1; // new line character
+        buffer->line_lengths[buffer->cursor.row] += deleted_line_length;
+
+        buffer->last_line_idx--;
+    }
+    else if (c_deleted != INVALID_CHAR)
+    {
+        buffer->line_lengths[buffer->cursor.row] -= 1;
+    }
 }
 
-static void render_batch_glyphs(Ted_Context* ctx, s32 count)
+// Set cursor position and update gap buffer pointer according to new cursor.
+void set_cursor(Ted_Context* ctx, s16 buffer_idx, s32 row, s32 col)
 {
-    glUniformMatrix4fv(glGetUniformLocation(ctx->render_ctx->program, "u_transforms"), count, GL_FALSE, (f32*)ctx->render_ctx->transforms);
-    glUniform1uiv(glGetUniformLocation(ctx->render_ctx->program, "u_charmap"), count, ctx->render_ctx->charmap);
+    assert(buffer_idx < ctx->buffer_count);
+
+    auto* buffer = ctx->buffers + buffer_idx;
+    auto* display_buffer = &buffer->display_buffer;
+
+    if (row < 0 || row > buffer->last_line_idx)
+    {
+        printf("Incorrect pointer row position (%d)\n", row);
+        return;
+    }
+
+    const s32 line_length = buffer->line_lengths[row];
+    if (col < 0 || col > line_length)
+    {
+        printf("Incorrect pointer col position (%d)\n", col);
+        return;
+    }
+
+    s32 pos = 0;
+    for (s32 i = 0; i < row; ++i)
+        pos += buffer->line_lengths[i];
+    pos += col;
+    
+    set_pointer(display_buffer, pos);
+    
+    buffer->cursor.row = row;
+    buffer->cursor.col = col;
+}
+
+void move_cursor_horizontally(Ted_Context* ctx, s16 buffer_idx, s32 delta)
+{
+    assert(buffer_idx < ctx->buffer_count);
+    auto* buffer = ctx->buffers + buffer_idx;
+
+    s32 new_col = buffer->cursor.col + delta;
+    s32 new_row = buffer->cursor.row;
+    
+    const s32 line_length = buffer->line_lengths[buffer->cursor.row];
+    if (new_col >= line_length)
+    {
+        if (++new_row > buffer->last_line_idx) return;
+        new_col -= line_length;
+    }
+    else if (new_col < 0)
+    {
+        if (--new_row < 0) return;
+        new_col += buffer->line_lengths[new_row];
+    }
+    
+    set_cursor(ctx, buffer_idx, new_row, new_col);
+}
+
+void move_cursor_vertically(Ted_Context* ctx, s16 buffer_idx, s32 delta)
+{
+    // @Todo: not implemeted.
+    assert(false);
+}
+
+static void render_batch_glyphs(Font_Render_Context* render_ctx, s32 count)
+{
+    glUniformMatrix4fv(glGetUniformLocation(render_ctx->program, "u_transforms"), count, GL_FALSE, (f32*)render_ctx->transforms);
+    glUniform1uiv(glGetUniformLocation(render_ctx->program, "u_charmap"), count, render_ctx->charmap);
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, count);
 }
 
@@ -423,34 +596,36 @@ static void render(Ted_Context* ctx)
     glActiveTexture(GL_TEXTURE0);
     glUniform3f(glGetUniformLocation(ctx->render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
     
-    const s32 buffer_data_size = (s32)data_size(&buffer->display_buffer);
-    const s32 prefix_size = (s32)prefix_data_size(&buffer->display_buffer);
+    const s32 buffer_data_size = data_size(&buffer->display_buffer);
+    const s32 prefix_size = prefix_data_size(&buffer->display_buffer);
     
     s16 work_idx = 0;
     s32 x = buffer->x;
     s32 y = buffer->y;
 
-    for (s32 i = 0, j = 0; i < buffer_data_size; ++i)
+    for (s32 i = 0; i < buffer_data_size; ++i)
     {
         if (y < 0) break;
-                
+
+        const char c = char_at(&buffer->display_buffer, i);
+        
         // @Cleanup: looks nasty, refactor.
-        char c;
-        if (i < prefix_size) c = buffer->display_buffer.start[i];
-        else c = buffer->display_buffer.gap_end[j++];
+        //char c;
+        //if (i < prefix_size) c = buffer->display_buffer.start[i];
+        //else c = buffer->display_buffer.gap_end[j++];
 
         // @Cleanup: super straightforward text culling,
         // don't like it, but it gets the job done for now, refactor later.
         if (y > ctx->window_h)
         {
-            if (c == '\n') y -= atlas->new_line_offset;
+            if (c == '\n') y -= atlas->line_height;
             continue;
         }
 
         if (c == '\n')
         {
             x = buffer->x;
-            y -= atlas->new_line_offset;
+            y -= atlas->line_height;
             continue;
         }
         
@@ -487,14 +662,14 @@ static void render(Ted_Context* ctx)
 
         if (++work_idx >= FONT_RENDER_BATCH_SIZE)
         {
-            render_batch_glyphs(ctx, work_idx);
+            render_batch_glyphs(ctx->render_ctx, work_idx);
             work_idx = 0;
         }
 
         x += metric->advance_width;
     }
     
-    if (work_idx > 0) render_batch_glyphs(ctx, work_idx);
+    if (work_idx > 0) render_batch_glyphs(ctx->render_ctx, work_idx);
     
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -507,13 +682,9 @@ static s32 vert_offset_from_baseline(const Font* font, const Font_Atlas* atlas)
     return (s32)((font->ascent + font->line_gap) * atlas->px_h_scale);
 }
 
-static void copy(u32* dst, const char* src, s32 size)
-{
-    for (s32 i = 0; i < size; ++i) dst[i] = src[i];    
-}
-
 void update_frame(Ted_Context* ctx)
 {
+    // @Cleanup: move to context or smth.
     static f32 prev_time = (f32)glfwGetTime();
 
     const auto* atlas = active_atlas(ctx);
@@ -522,8 +693,10 @@ void update_frame(Ted_Context* ctx)
 
     // @Todo: update all opened buffers (feature to come).
     auto* buffer = active_buffer(ctx);
+    auto* display_buffer = &buffer->display_buffer;
+    
     buffer->min_x = -ctx->window_w; // @Todo: should be equal to longest line length
-    buffer->max_y = ctx->buffer_min_y + (buffer->new_line_count * atlas->new_line_offset);
+    buffer->max_y = ctx->buffer_min_y + (buffer->last_line_idx * atlas->line_height);
     buffer->x = clamp(buffer->x, buffer->min_x, ctx->buffer_max_x);
     buffer->y = clamp(buffer->y, ctx->buffer_min_y, buffer->max_y);
     
@@ -532,30 +705,59 @@ void update_frame(Ted_Context* ctx)
 
     render(ctx);
 
+    /*
+    // Render simple cursor.
+    const auto* cursor = &buffer->cursor;
+    const f32 cursor_x = cursor->col * atlas->font_size;
+    const f32 cursor_y = cursor->row * atlas->line_height;
+
+    identity(&buffer->cursor.transform);
+    translate(&buffer->cursor.transform, vec3{cursor_x, cursor_y, 0.0f});
+    scale(&buffer->cursor.transform, vec3{1.0f, 1.0f, 0.0f});
+
+    glUseProgram(buffer->cursor.program);
+    glBindVertexArray(buffer->cursor.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer->cursor.vbo);
+
+    glUniformMatrix4fv(glGetUniformLocation(buffer->cursor.program, "u_transform"), count, GL_FALSE, (f32*)buffer->cursor.transform);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);
+    */
+    
 #if TED_DEBUG
     static char debug_str[512];
-    static u32 debug_text[512];
     
     s32 debug_str_size = sprintf(debug_str, "%.2fms %.ffps", ctx->dt * 1000.0f, 1 / ctx->dt);
-    copy(debug_text, debug_str, debug_str_size);
 
     // @Cleanup: using line gap for x positioning is not the best idea.
-    f32 x = ctx->window_w - ctx->debug_atlas->new_line_offset * debug_str_size * 0.5f;
-    f32 y = (f32)(ctx->window_h - ctx->debug_atlas->new_line_offset);
-    render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
+    f32 x = ctx->window_w - ctx->debug_atlas->line_height * debug_str_size * 0.5f;
+    f32 y = (f32)(ctx->window_h - ctx->debug_atlas->line_height);
+    render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
-    const char cursor_c = *buffer->display_buffer.cursor;
-    debug_str_size = sprintf(debug_str, "cursor_pos=%lld\nend=%lld\ngap_start=%lld\ngap_end=%lld\nxy=(%d, %d)\nmin_xy=(%d, %d)\nmax_xy=(%d, %d)\nnew_line_count=%d\nfont_size=%d",
-                             cursor_pos(&buffer->display_buffer),
-                             total_data_size(&buffer->display_buffer),
-                             prefix_data_size(&buffer->display_buffer),
+    debug_str_size = sprintf(debug_str, "pointer_pos=%d\ncursor=(%d, %d, %c)\nend=%d\ngap_start=%d\ngap_end=%d\nxy=(%d, %d)\nmin_xy=(%d, %d)\nmax_xy=(%d, %d)\nlast_line_idx=%d\nfont_size=%d",
+                             pointer_pos(&buffer->display_buffer),
+                             buffer->cursor.row, buffer->cursor.col, char_at_pointer(display_buffer),
+                             total_data_size(display_buffer),
+                             prefix_data_size(display_buffer),
                              buffer->display_buffer.gap_end - buffer->display_buffer.start,
-                             buffer->x, buffer->y, buffer->min_x, ctx->buffer_min_y, ctx->buffer_max_x, buffer->max_y, buffer->new_line_count, atlas->font_size);
-    copy(debug_text, debug_str, debug_str_size);
+                             buffer->x, buffer->y, buffer->min_x, ctx->buffer_min_y, ctx->buffer_max_x, buffer->max_y, buffer->last_line_idx, atlas->font_size);
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
-    y -= ctx->debug_atlas->new_line_offset;
-    render_text(ctx->render_ctx, ctx->debug_atlas, debug_text, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
+    y -= ctx->debug_atlas->line_height;
+    render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
+
+    x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
+    y = ctx->window_h / 2;
+        
+    for (s32 i = 0; i < 5; ++i)
+    {
+        y -= ctx->debug_atlas->line_height;
+        debug_str_size = sprintf(debug_str, "line_length[%d]=%d", i, buffer->line_lengths[i]);
+        render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
+    }
 #endif
     
     glfwSwapBuffers(ctx->window);

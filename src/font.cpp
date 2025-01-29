@@ -70,7 +70,7 @@ void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, s16 f
     const u32 charcode_count = atlas->end_charcode - atlas->start_charcode + 1;
     const f32 scale = stbtt_ScaleForPixelHeight(font->info, (f32)font_size);
     atlas->px_h_scale = scale;
-    atlas->new_line_offset = (s32)((font->ascent - font->descent + font->line_gap) * scale);
+    atlas->line_height = (s32)((font->ascent - font->descent + font->line_gap) * scale);
     
     s32 max_layers;
     glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &max_layers);
@@ -137,7 +137,7 @@ void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, s16 f
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);    
 }
 
-void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const u32* text, u32 size, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b)
+void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const char* text, u32 size, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b)
 {
     glUseProgram(ctx->program);
     glBindVertexArray(ctx->vao);
@@ -153,17 +153,17 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
     
     for (u32 i = 0; i < size; ++i)
     {
-        const u32 c = text[i];
+        const char c = text[i];
         
         if (c == '\n')
         {
             x_pos = x;
-            y_pos -= atlas->new_line_offset * scale;
+            y_pos -= atlas->line_height * scale;
             continue;
         }
         
-        assert(c >= atlas->start_charcode);
-        assert(c <= atlas->end_charcode);
+        assert((u32)c >= atlas->start_charcode);
+        assert((u32)c <= atlas->end_charcode);
 
         const u32 ci = c - atlas->start_charcode; // correctly shifted index
         const Font_Glyph_Metric* metric = atlas->metrics + ci;

@@ -400,9 +400,7 @@ void push_char(Ted_Context* ctx, s16 buffer_idx, char c)
     push_char(&buffer->display_buffer, c);
     
     if (c == '\n')
-    {
-        // @Todo: check new line add in the middle of line.
-        
+    {   
         if (buffer->last_line_idx >= TED_MAX_LINE_COUNT)
         {
             printf("Reached max line count (%d)\n", TED_MAX_LINE_COUNT);
@@ -585,11 +583,6 @@ static void render(Ted_Context* ctx)
         if (y < 0) break;
 
         const char c = char_at(&buffer->display_buffer, i);
-        
-        // @Cleanup: looks nasty, refactor.
-        //char c;
-        //if (i < prefix_size) c = buffer->display_buffer.start[i];
-        //else c = buffer->display_buffer.gap_end[j++];
 
         // @Cleanup: super straightforward text culling,
         // don't like it, but it gets the job done for now, refactor later.

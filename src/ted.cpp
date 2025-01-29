@@ -368,6 +368,30 @@ void decrease_font_size(Ted_Context* ctx)
     ctx->active_atlas_idx = max(0, ctx->active_atlas_idx - 1);
 }
 
+// Shift buffer line lengths from smallest index till last line.
+static void shift_line_lengths(Ted_Buffer* buffer, s32 dst_idx, s32 src_idx)
+{
+    assert(dst_idx >= 0);
+    assert(src_idx >= 0);
+    assert(dst_idx <= buffer->last_line_idx);
+    assert(src_idx <= buffer->last_line_idx);
+
+    s32* dst = buffer->line_lengths + dst_idx;
+    const s32* src = buffer->line_lengths + src_idx;
+    const s32* end = buffer->line_lengths + buffer->last_line_idx + 1;
+    const s32 size = (s32)(end - src) * sizeof(s32);
+    memmove(dst, src, size);
+
+    // Clear left lenghts after shift.
+    const s32 delta = dst_idx - src_idx;
+    const s32 delta_abs = abs(delta);
+    if (delta < 0)
+    {
+        dst = buffer->line_lengths + buffer->last_line_idx + delta_abs - 1;
+        memset(dst, 0, delta_abs * sizeof(s32));
+    }
+}
+
 void push_char(Ted_Context* ctx, s16 buffer_idx, char c)
 {
     assert(buffer_idx < ctx->buffer_count);
@@ -377,39 +401,33 @@ void push_char(Ted_Context* ctx, s16 buffer_idx, char c)
     
     if (c == '\n')
     {
+        // @Todo: check new line add in the middle of line.
+        
         if (buffer->last_line_idx >= TED_MAX_LINE_COUNT)
         {
-            printf("Reached max line count (%d)", TED_MAX_LINE_COUNT);
+            printf("Reached max line count (%d)\n", TED_MAX_LINE_COUNT);
             return;
         }
 
-        if (buffer->cursor.row == buffer->last_line_idx)
-            buffer->line_lengths[buffer->cursor.row] += 1;
+        const s32 right_line_part_length = buffer->line_lengths[buffer->cursor.row] - buffer->cursor.col;
 
         // @Speed: array is not the best choice for storing line sizes
-        // due to need to constantly move them like this, same during delete.
+        // due to need to constantly shift them, same during delete.
         if (buffer->cursor.row < buffer->last_line_idx)
-        {
-            s32* dst = buffer->line_lengths + buffer->cursor.row + 1;
-            const s32* src = buffer->line_lengths + buffer->cursor.row;
-            const s32* last = buffer->line_lengths + buffer->last_line_idx;
-            const s32 size = (last - src + 1) * sizeof(s32);
-            memmove(dst, src, size);
-        }
-        
+            shift_line_lengths(buffer, buffer->cursor.row + 1, buffer->cursor.row);
+
+        buffer->line_lengths[buffer->cursor.row] -= right_line_part_length;
+
         buffer->cursor.row++;
         buffer->cursor.col = 0;
-        
-        buffer->line_lengths[buffer->cursor.row] = 0;
         buffer->last_line_idx++;
 
-        if (buffer->cursor.row < buffer->last_line_idx)
-            buffer->line_lengths[buffer->cursor.row] = 1;
+        buffer->line_lengths[buffer->cursor.row] = right_line_part_length;
     }
     else
     {
-        buffer->line_lengths[buffer->cursor.row] += 1;
         buffer->cursor.col++;
+        buffer->line_lengths[buffer->cursor.row] += 1;
     }    
 }
 
@@ -419,23 +437,6 @@ void push_str(Ted_Context* ctx, s16 buffer_idx, const char* str, s32 size)
     // @Speed: this will be very slow if string has several lines.
     for (s32 i = 0; i < size; ++i)
         push_char(ctx, buffer_idx, str[i]);
-}
-
-static void shift_array_s32(s32* data, s32 data_count, s32 start_idx, s32 delta, s32 shift_count)
-{ 
-    for (s32 i = 0; i < shift_count; ++i)
-    {
-        const s32 src_idx = start_idx + i;
-        const s32 dst_idx = src_idx + delta;
-
-        assert(dst_idx > 0);
-        assert(src_idx > 0);
-        assert(dst_idx < data_count);
-        assert(src_idx < data_count);
-
-        data[dst_idx] = data[src_idx];
-        data[src_idx] = 0;
-    }
 }
 
 void delete_char(Ted_Context* ctx, s16 buffer_idx)
@@ -449,39 +450,20 @@ void delete_char(Ted_Context* ctx, s16 buffer_idx)
     if (c_deleted == '\n')
     {
         const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row];
-        printf("deleted_line_length (%d)", deleted_line_length);
-        //buffer->line_lengths[buffer->cursor.row] = 0; // we are done with it
 
-        
-        // @Todo: fix line length shift (and in other places too, mb make separate function).
         if (buffer->cursor.row < buffer->last_line_idx)
-        {
-            s32* dst = buffer->line_lengths + buffer->cursor.row;
-            const s32* src = buffer->line_lengths + buffer->cursor.row + 1;
-            const s32* last = buffer->line_lengths + buffer->last_line_idx;
-            const s32 size = (last - src + 1) * sizeof(s32);
-            //printf("shift dst(%d) src(%d) last(%d)", dst - buffer->line_lengths, src - buffer->line_lengths, last - buffer->line_lengths);
-            memmove(dst, src, size);
-            
-            buffer->line_lengths[buffer->last_line_idx] = 0;
-        }
+            shift_line_lengths(buffer, buffer->cursor.row, buffer->cursor.row + 1);
         
-
-        //const s32 line_count = buffer->last_line_idx + 1;
-        //const s32 start_idx = buffer->cursor.row + 1;
-        //shift_array_s32(buffer->line_lengths, line_count, start_idx, -1, line_count - start_idx);
-
         buffer->cursor.row--;
-        buffer->line_lengths[buffer->cursor.row] -= 1; // new line character
         buffer->cursor.col = buffer->line_lengths[buffer->cursor.row];
+
         buffer->line_lengths[buffer->cursor.row] += deleted_line_length;
-        
         buffer->last_line_idx--;
     }
     else if (c_deleted != INVALID_CHAR)
     {
-        buffer->line_lengths[buffer->cursor.row] -= 1;
         buffer->cursor.col--;
+        buffer->line_lengths[buffer->cursor.row] -= 1;
     }
 }
 
@@ -493,20 +475,15 @@ void delete_char_overwrite(Ted_Context* ctx, s16 buffer_idx)
     auto* display_buffer = &buffer->display_buffer;
 
     const char c_deleted = delete_char_overwrite(display_buffer);
-    // @Test: verify implementation.
+
     if (c_deleted == '\n')
     {
         const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row];
 
-        s32* dst = buffer->line_lengths + buffer->cursor.row;
-        const s32* src = buffer->line_lengths + buffer->cursor.row + 1;
-        const s32* last = buffer->line_lengths + buffer->last_line_idx;
-        const s32 size = (last - src) * sizeof(s32);
-        memmove(dst, src, size);
+        if (buffer->cursor.row < buffer->last_line_idx)
+            shift_line_lengths(buffer, buffer->cursor.row, buffer->cursor.row + 1);
 
-        buffer->line_lengths[buffer->cursor.row] -= 1; // new line character
         buffer->line_lengths[buffer->cursor.row] += deleted_line_length;
-
         buffer->last_line_idx--;
     }
     else if (c_deleted != INVALID_CHAR)
@@ -525,20 +502,20 @@ void set_cursor(Ted_Context* ctx, s16 buffer_idx, s32 row, s32 col)
 
     if (row < 0 || row > buffer->last_line_idx)
     {
-        printf("Incorrect pointer row position (%d)\n", row);
+        printf("Incorrect cursor row position (%d)\n", row);
         return;
     }
 
     const s32 line_length = buffer->line_lengths[row];
     if (col < 0 || col > line_length)
     {
-        printf("Incorrect pointer col position (%d)\n", col);
+        printf("Incorrect cursor col position (%d)\n", col);
         return;
     }
 
     s32 pos = 0;
     for (s32 i = 0; i < row; ++i)
-        pos += buffer->line_lengths[i];
+        pos += buffer->line_lengths[i] + 1; // include '\n' for pointer position
     pos += col;
     
     set_pointer(display_buffer, pos);
@@ -552,19 +529,19 @@ void move_cursor_horizontally(Ted_Context* ctx, s16 buffer_idx, s32 delta)
     assert(buffer_idx < ctx->buffer_count);
     auto* buffer = ctx->buffers + buffer_idx;
 
-    s32 new_col = buffer->cursor.col + delta;
     s32 new_row = buffer->cursor.row;
+    s32 new_col = buffer->cursor.col + delta;
     
-    const s32 line_length = buffer->line_lengths[buffer->cursor.row];
-    if (new_col >= line_length)
+    const s32 current_line_length = buffer->line_lengths[buffer->cursor.row];
+    if (new_col > current_line_length)
     {
         if (++new_row > buffer->last_line_idx) return;
-        new_col -= line_length;
+        new_col -= (current_line_length + 1); // include '\n'
     }
     else if (new_col < 0)
     {
         if (--new_row < 0) return;
-        new_col += buffer->line_lengths[new_row];
+        new_col += buffer->line_lengths[new_row] + 1; // include '\n'
     }
     
     set_cursor(ctx, buffer_idx, new_row, new_col);
@@ -682,6 +659,14 @@ static s32 vert_offset_from_baseline(const Font* font, const Font_Atlas* atlas)
     return (s32)((font->ascent + font->line_gap) * atlas->px_h_scale);
 }
 
+static s32 line_width_px(Font_Atlas* atlas, const char* str, s32 size)
+{
+    for (s32 i = 0; i < size; ++i)
+    {
+        // @Todo
+    }
+}
+
 void update_frame(Ted_Context* ctx)
 {
     // @Cleanup: move to context or smth.
@@ -737,12 +722,12 @@ void update_frame(Ted_Context* ctx)
     f32 y = (f32)(ctx->window_h - ctx->debug_atlas->line_height);
     render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
-    debug_str_size = sprintf(debug_str, "pointer_pos=%d\ncursor=(%d, %d, %c)\nend=%d\ngap_start=%d\ngap_end=%d\nxy=(%d, %d)\nmin_xy=(%d, %d)\nmax_xy=(%d, %d)\nlast_line_idx=%d\nfont_size=%d",
+    debug_str_size = sprintf(debug_str, "pointer_pos=%d\ncursor=(%d, %d | %c)\nend=%d\ngap_start=%d\ngap_end=%d\nxy=(%d, %d)\nmin_xy=(%d, %d)\nmax_xy=(%d, %d)\nlast_line_idx=%d\nfont_size=%d",
                              pointer_pos(&buffer->display_buffer),
                              buffer->cursor.row, buffer->cursor.col, char_at_pointer(display_buffer),
                              total_data_size(display_buffer),
                              prefix_data_size(display_buffer),
-                             buffer->display_buffer.gap_end - buffer->display_buffer.start,
+                             (s32)(buffer->display_buffer.gap_end - buffer->display_buffer.start),
                              buffer->x, buffer->y, buffer->min_x, ctx->buffer_min_y, ctx->buffer_max_x, buffer->max_y, buffer->last_line_idx, atlas->font_size);
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
@@ -750,7 +735,7 @@ void update_frame(Ted_Context* ctx)
     render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
-    y = ctx->window_h / 2;
+    y = ctx->window_h * 0.5f;
         
     for (s32 i = 0; i < 5; ++i)
     {

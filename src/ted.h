@@ -38,7 +38,7 @@ struct Ted_Buffer
     Ted_Cursor cursor;
     Gap_Buffer display_buffer;
     char* path; // path used to load file contents
-    s32* line_lengths;
+    s32* line_lengths; // do not include '\n'
     s32 last_line_idx;
     s32 x;
     s32 y;

@@ -21,12 +21,12 @@ int main()
 
     const s16 buffer_idx = create_buffer(&ted);
     set_active_buffer(&ted, buffer_idx);
-    /*push_str(&ted, buffer_idx,
+    push_str(&ted, buffer_idx,
              "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n"
              "abcdefghijklmnopqrstuvwxyz\n"
              "`1234567890-=[]\\;',./\n"
              "~!@#$%^&*()_+{}|:\"<>?\n",
-             27 + 27 + 22 + 22);*/
+             27 + 27 + 22 + 22);
     
     while (alive(&ted))
     {

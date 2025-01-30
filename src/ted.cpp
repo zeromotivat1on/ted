@@ -445,7 +445,7 @@ void delete_char(Ted_Context* ctx, s16 buffer_idx)
 
     const char c_deleted = delete_char(display_buffer);
     if (c_deleted == '\n')
-    {
+    {   
         const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row];
         const s32 prev_line_length = buffer->line_lengths[buffer->cursor.row - 1];
         buffer->line_lengths[buffer->cursor.row - 1] += deleted_line_length;
@@ -543,6 +543,31 @@ void move_cursor_vertically(Ted_Context* ctx, s16 buffer_idx, s32 delta)
     assert(false);
 }
 
+static s32 line_width_px_till_pointer(const Font_Atlas* atlas, const Gap_Buffer* buffer, s32 start_pos)
+{
+    s32 width = 0;
+    const s32 end_pos = pointer_pos(buffer);
+    for (s32 i = start_pos; i < end_pos; ++i)
+    {
+        const char c = char_at(buffer, i);
+        if (c != INVALID_CHAR)
+        {
+            const u32 ci = c - atlas->start_charcode; // correctly shifted index
+            const Font_Glyph_Metric* metric = atlas->metrics + ci;
+            width += metric->advance_width;
+        }
+    }
+    return width;
+}
+
+static s32 line_start_pointer_pos(const Ted_Buffer* buffer)
+{
+    s32 pos = 0;
+    for (s32 i = 0; i < buffer->cursor.row; ++i)
+        pos += buffer->line_lengths[i] + 1;
+    return pos;
+}
+
 static void render_batch_glyphs(Font_Render_Context* render_ctx, s32 count)
 {
     glUniformMatrix4fv(glGetUniformLocation(render_ctx->program, "u_transforms"), count, GL_FALSE, (f32*)render_ctx->transforms);
@@ -550,11 +575,15 @@ static void render_batch_glyphs(Font_Render_Context* render_ctx, s32 count)
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, count);
 }
 
-static void render(Ted_Context* ctx)
+static void render_buffer(Ted_Context* ctx, s16 buffer_idx)
 {
-    auto* buffer = active_buffer(ctx);
+    assert(buffer_idx < ctx->buffer_count);
+    
+    auto* buffer = ctx->buffers + buffer_idx;
+    const auto* display_buffer = &buffer->display_buffer;
     const auto* atlas = active_atlas(ctx);
 
+    // Render buffer contents.
     glUseProgram(ctx->font_render_ctx->program);
     glBindVertexArray(ctx->font_render_ctx->vao);
     glBindBuffer(GL_ARRAY_BUFFER, ctx->font_render_ctx->vbo);
@@ -637,40 +666,37 @@ static void render(Ted_Context* ctx)
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     glUseProgram(0);
+
+    // Render simple cursor.
+    const auto* cursor = &buffer->cursor;
+
+    const s32 line_start_pos = line_start_pointer_pos(buffer);
+    const s32 width_px = line_width_px_till_pointer(atlas, display_buffer, line_start_pos);
+    
+    const f32 cursor_x = width_px + 4.0f;
+    const f32 cursor_y = (ctx->window_h - atlas->line_height) - cursor->row * atlas->line_height;
+
+    identity(&buffer->cursor.transform);
+    translate(&buffer->cursor.transform, vec3{cursor_x, cursor_y, 0.0f});
+    scale(&buffer->cursor.transform, vec3{2.0f, (f32)atlas->line_height, 0.0f});
+
+    glUseProgram(ctx->cursor_render_ctx->program);
+    glBindVertexArray(ctx->cursor_render_ctx->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->cursor_render_ctx->vbo);
+
+    glUniform3f(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
+    glUniformMatrix4fv(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_transform"), 1, GL_FALSE, (f32*)&buffer->cursor.transform);
+    
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);
 }
 
 static s32 vert_offset_from_baseline(const Font* font, const Font_Atlas* atlas)
 {
     return (s32)((font->ascent + font->line_gap) * atlas->px_h_scale);
-}
-
-static s32 line_width_px_till_pointer(const Font_Atlas* atlas, const Gap_Buffer* buffer, s32 start_pos)
-{
-    s32 width = 0;
-    const s32 end_pos = pointer_pos(buffer);
-    for (s32 i = start_pos; i < end_pos; ++i)
-    {
-        const char c = char_at(buffer, i);
-        if (c != INVALID_CHAR)
-        {
-            const u32 ci = c - atlas->start_charcode; // correctly shifted index
-            const Font_Glyph_Metric* metric = atlas->metrics + ci;
-            width += metric->advance_width;
-        }
-    }
-    return width;
-}
-
-static s32 line_width_px(Font_Atlas* atlas, const char* str, s32 size)
-{
-    s32 width = 0;
-    for (s32 i = 0; i < size; ++i)
-    {
-        const u32 ci = str[i] - atlas->start_charcode; // correctly shifted index
-        const Font_Glyph_Metric* metric = atlas->metrics + ci;
-        width += metric->advance_width;
-    }
-    return width;
 }
 
 void update_frame(Ted_Context* ctx)
@@ -694,45 +720,12 @@ void update_frame(Ted_Context* ctx)
     glClearColor(ctx->bg_color.r, ctx->bg_color.g, ctx->bg_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    render(ctx);
-
-    // Render simple cursor.
-    const auto* cursor = &buffer->cursor;
-
-    s32 start_pos = 0;
-    for (s32 i = 0; i < cursor->row; ++i)
-    {
-        start_pos += buffer->line_lengths[i] + 1;
-    }
-    
-    const s32 width_px = line_width_px_till_pointer(atlas, display_buffer, start_pos);
-    
-    const f32 cursor_x = width_px + 4.0f;
-    const f32 cursor_y = (ctx->window_h - atlas->line_height) - cursor->row * atlas->line_height;
-
-    identity(&buffer->cursor.transform);
-    translate(&buffer->cursor.transform, vec3{cursor_x, cursor_y, 0.0f});
-    scale(&buffer->cursor.transform, vec3{2.0f, (f32)atlas->line_height, 0.0f});
-
-    glUseProgram(ctx->cursor_render_ctx->program);
-    glBindVertexArray(ctx->cursor_render_ctx->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, ctx->cursor_render_ctx->vbo);
-
-    glUniform3f(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
-    glUniformMatrix4fv(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_transform"), 1, GL_FALSE, (f32*)&buffer->cursor.transform);
-    
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    glUseProgram(0);
+    render_buffer(ctx, ctx->active_buffer_idx);
     
 #if TED_DEBUG
     static char debug_str[512];
-    
     s32 debug_str_size = sprintf(debug_str, "%.2fms %.ffps", ctx->dt * 1000.0f, 1 / ctx->dt);
 
-    // @Cleanup: using line gap for x positioning is not the best idea.
     f32 x = ctx->window_w - ctx->debug_atlas->line_height * debug_str_size * 0.5f;
     f32 y = (f32)(ctx->window_h - ctx->debug_atlas->line_height);
     render_text(ctx->font_render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
@@ -748,16 +741,6 @@ void update_frame(Ted_Context* ctx)
     x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
     y -= ctx->debug_atlas->line_height;
     render_text(ctx->font_render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
-
-    x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
-    y = ctx->window_h * 0.5f;
-        
-    for (s32 i = 0; i < 5; ++i)
-    {
-        y -= ctx->debug_atlas->line_height;
-        debug_str_size = sprintf(debug_str, "line_length[%d]=%d", i, buffer->line_lengths[i]);
-        render_text(ctx->font_render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
-    }
 #endif
     
     glfwSwapBuffers(ctx->window);

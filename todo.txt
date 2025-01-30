@@ -1,10 +1,9 @@
 | Ted
-- Clip screen non-visible glyphs
-- Cursor visuals
 - Up/down arrow navigation and mouse click
 - Clipboard copy/paste
 - Region selection/cut/paste etc
 - Handle tab input and its different sizes
+- Change uniform arrays to uniform buffer objects
 
 | Framework
 - Make gap buffer use memory arena

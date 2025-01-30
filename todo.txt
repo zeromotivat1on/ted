@@ -1,5 +1,5 @@
 | Ted
-- Up/down arrow navigation and mouse click
+- Mouse click
 - Clipboard copy/paste
 - Region selection/cut/paste etc
 - Handle tab input and its different sizes

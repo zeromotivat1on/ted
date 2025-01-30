@@ -105,6 +105,16 @@ static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, 
         }
         
         break;
+
+    case GLFW_KEY_UP:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+            move_cursor_vertically(ctx, buffer_idx, -1);
+        break;
+
+    case GLFW_KEY_DOWN:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+            move_cursor_vertically(ctx, buffer_idx, 1);
+        break;
         
     case GLFW_KEY_EQUAL:
         if ((action == GLFW_PRESS || action == GLFW_REPEAT) && mods & GLFW_MOD_CONTROL)
@@ -517,7 +527,7 @@ void set_cursor(Ted_Context* ctx, s16 buffer_idx, s32 row, s32 col)
 void move_cursor_horizontally(Ted_Context* ctx, s16 buffer_idx, s32 delta)
 {
     assert(buffer_idx < ctx->buffer_count);
-    auto* buffer = ctx->buffers + buffer_idx;
+    const auto* buffer = ctx->buffers + buffer_idx;
 
     s32 new_row = buffer->cursor.row;
     s32 new_col = buffer->cursor.col + delta;
@@ -539,8 +549,16 @@ void move_cursor_horizontally(Ted_Context* ctx, s16 buffer_idx, s32 delta)
 
 void move_cursor_vertically(Ted_Context* ctx, s16 buffer_idx, s32 delta)
 {
-    // @Todo: not implemeted.
-    assert(false);
+    assert(buffer_idx < ctx->buffer_count);
+    auto* buffer = ctx->buffers + buffer_idx;
+
+    const s32 new_line_idx = buffer->cursor.row + delta;
+    if (new_line_idx < 0 || new_line_idx > buffer->last_line_idx) return;
+    
+    const s32 current_line_length = buffer->line_lengths[buffer->cursor.row];
+    buffer->cursor.col = clamp(buffer->cursor.col, 0, buffer->line_lengths[new_line_idx]);
+    
+    set_cursor(ctx, buffer_idx, new_line_idx, buffer->cursor.col);
 }
 
 static s32 line_width_px_till_pointer(const Font_Atlas* atlas, const Gap_Buffer* buffer, s32 start_pos)

@@ -368,28 +368,22 @@ void decrease_font_size(Ted_Context* ctx)
     ctx->active_atlas_idx = max(0, ctx->active_atlas_idx - 1);
 }
 
-// Shift buffer line lengths from smallest index till last line.
-static void shift_line_lengths(Ted_Buffer* buffer, s32 dst_idx, s32 src_idx)
+static void insert_line(Ted_Buffer* buffer, s32 idx, s32 line_length)
 {
-    assert(dst_idx >= 0);
-    assert(src_idx >= 0);
-    assert(dst_idx <= buffer->last_line_idx);
-    assert(src_idx <= buffer->last_line_idx);
+    buffer->last_line_idx++;
+    for (s32 i = buffer->last_line_idx; i > idx; --i)
+        buffer->line_lengths[i] = buffer->line_lengths[i - 1];
 
-    s32* dst = buffer->line_lengths + dst_idx;
-    const s32* src = buffer->line_lengths + src_idx;
-    const s32* end = buffer->line_lengths + buffer->last_line_idx + 1;
-    const s32 size = (s32)(end - src) * sizeof(s32);
-    memmove(dst, src, size);
+    buffer->line_lengths[idx] = line_length;
+}
 
-    // Clear left lenghts after shift.
-    const s32 delta = dst_idx - src_idx;
-    const s32 delta_abs = abs(delta);
-    if (delta < 0)
-    {
-        dst = buffer->line_lengths + buffer->last_line_idx + delta_abs - 1;
-        memset(dst, 0, delta_abs * sizeof(s32));
-    }
+static void remove_line(Ted_Buffer* buffer, s32 idx)
+{
+    for (s32 i = idx; i <= buffer->last_line_idx; ++i)
+        buffer->line_lengths[i] = buffer->line_lengths[i + 1];
+
+    buffer->line_lengths[buffer->last_line_idx] = 0;
+    buffer->last_line_idx--;
 }
 
 void push_char(Ted_Context* ctx, s16 buffer_idx, char c)
@@ -408,19 +402,12 @@ void push_char(Ted_Context* ctx, s16 buffer_idx, char c)
         }
 
         const s32 right_line_part_length = buffer->line_lengths[buffer->cursor.row] - buffer->cursor.col;
-
-        // @Speed: array is not the best choice for storing line sizes
-        // due to need to constantly shift them, same during delete.
-        if (buffer->cursor.row < buffer->last_line_idx)
-            shift_line_lengths(buffer, buffer->cursor.row + 1, buffer->cursor.row);
-
+        
         buffer->line_lengths[buffer->cursor.row] -= right_line_part_length;
+        insert_line(buffer, buffer->cursor.row + 1, right_line_part_length);
 
         buffer->cursor.row++;
         buffer->cursor.col = 0;
-        buffer->last_line_idx++;
-
-        buffer->line_lengths[buffer->cursor.row] = right_line_part_length;
     }
     else
     {
@@ -448,15 +435,12 @@ void delete_char(Ted_Context* ctx, s16 buffer_idx)
     if (c_deleted == '\n')
     {
         const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row];
-
-        if (buffer->cursor.row < buffer->last_line_idx)
-            shift_line_lengths(buffer, buffer->cursor.row, buffer->cursor.row + 1);
-        
+        const s32 prev_line_length = buffer->line_lengths[buffer->cursor.row - 1];
+        buffer->line_lengths[buffer->cursor.row - 1] += deleted_line_length;
+        remove_line(buffer, buffer->cursor.row);
+ 
         buffer->cursor.row--;
-        buffer->cursor.col = buffer->line_lengths[buffer->cursor.row];
-
-        buffer->line_lengths[buffer->cursor.row] += deleted_line_length;
-        buffer->last_line_idx--;
+        buffer->cursor.col = prev_line_length;
     }
     else if (c_deleted != INVALID_CHAR)
     {
@@ -476,13 +460,9 @@ void delete_char_overwrite(Ted_Context* ctx, s16 buffer_idx)
 
     if (c_deleted == '\n')
     {
-        const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row];
-
-        if (buffer->cursor.row < buffer->last_line_idx)
-            shift_line_lengths(buffer, buffer->cursor.row, buffer->cursor.row + 1);
-
+        const s32 deleted_line_length = buffer->line_lengths[buffer->cursor.row + 1];
         buffer->line_lengths[buffer->cursor.row] += deleted_line_length;
-        buffer->last_line_idx--;
+        remove_line(buffer, buffer->cursor.row + 1);
     }
     else if (c_deleted != INVALID_CHAR)
     {

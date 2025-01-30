@@ -26,10 +26,14 @@ struct Ted_Cursor
 {
     s32 row;
     s32 col;
+    mat4 transform;
+};
+
+struct Ted_Cursor_Render_Context
+{
     u32 program;
     u32 vao;
     u32 vbo;
-    mat4 transform;
 };
 
 struct Ted_Buffer
@@ -51,8 +55,9 @@ struct Ted_Context
     Arena arena;
     GLFWwindow* window;
     Font* font;
+    Font_Render_Context* font_render_ctx;
+    Ted_Cursor_Render_Context* cursor_render_ctx;
     Font_Atlas* atlases;
-    Font_Render_Context* render_ctx;
     Ted_Buffer* buffers;
     vec3 bg_color;
     vec3 text_color;

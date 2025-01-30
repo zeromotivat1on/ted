@@ -44,9 +44,9 @@ struct Font_Render_Context
     mat4* transforms; // uniform array for batch rendering
 };
 
-void init_font(Arena* arena, Font* font, const char* path);
-void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w, s32 win_h);
-void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 start_charcode, u32 end_charcode, s16 font_size);
-void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, s16 font_size);
+void init_font(Font* font, Arena* arena, const char* path);
+void init_font_render_context(Font_Render_Context* ctx, Arena* arena, s32 win_w, s32 win_h);
+void bake_font_atlas(Font_Atlas* atlas, Arena* arena, const Font* font, u32 start_charcode, u32 end_charcode, s16 font_size);
+void rescale_font_atlas(Font_Atlas* atlas, Arena* arena, const Font* font, s16 font_size);
 void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const char* text, u32 size, f32 scale, f32 x, f32 y, f32 r, f32 g, f32 b);
 void on_framebuffer_resize(const Font_Render_Context* ctx, s32 w, s32 h);

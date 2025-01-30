@@ -10,10 +10,19 @@
 #include "matrix.h"
 #include "profile.h"
 
+void on_framebuffer_resize(const Ted_Cursor_Render_Context* ctx, s32 w, s32 h)
+{
+    glUseProgram(ctx->program);
+    const mat4 projection = mat4_ortho(0.0f, (f32)w, 0.0f, (f32)h, -1.0f, 1.0f);
+    glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_projection"), 1, GL_FALSE, (f32*)&projection);
+    glUseProgram(0);
+}
+
 static void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
 {
     auto* ctx = (Ted_Context*)glfwGetWindowUserPointer(window);
-    on_framebuffer_resize(ctx->render_ctx, width, height);
+    on_framebuffer_resize(ctx->font_render_ctx, width, height);
+    on_framebuffer_resize(ctx->cursor_render_ctx, width, height);
     glViewport(0, 0, width, height);
 }
 
@@ -160,8 +169,9 @@ void init_ted_context(Ted_Context* ctx, void* memory, u32 size)
     *ctx = {0};
     ctx->arena = create_arena(memory, size);
     ctx->font = push_struct(&ctx->arena, Font);
+    ctx->font_render_ctx = push_struct(&ctx->arena, Font_Render_Context);
+    ctx->cursor_render_ctx = push_struct(&ctx->arena, Ted_Cursor_Render_Context);
     ctx->atlases = push_array(&ctx->arena, TED_MAX_ATLASES, Font_Atlas);
-    ctx->render_ctx = push_struct(&ctx->arena, Font_Render_Context);
     ctx->buffers = push_array(&ctx->arena, TED_MAX_BUFFERS, Ted_Buffer);
     ctx->bg_color = vec3{2.0f / 255.0f, 26.0f / 255.0f, 25.0f / 255.0f};
     ctx->text_color = vec3{255.0f / 255.0f, 220.0f / 255.0f, 194.0f / 255.0f};
@@ -224,18 +234,18 @@ void create_window(Ted_Context* ctx, s16 w, s16 h, s16 x, s16 y)
 
 void load_font(Ted_Context* ctx, const char* path)
 {
-    init_font(&ctx->arena, ctx->font, path);
+    init_font(ctx->font, &ctx->arena, path);
 }
 
-static void init_cursor(Arena* arena, Ted_Cursor* cursor)
+static void init_cursor_render_context(Ted_Cursor_Render_Context* ctx, Arena* arena)
 {
-    //cursor->program = gl_load_program(arena, DIR_SHADERS "cursor.vs", DIR_SHADERS "cursor.fs");
+    ctx->program = gl_load_program(arena, DIR_SHADERS "cursor.vs", DIR_SHADERS "cursor.fs");
 
-    glGenVertexArrays(1, &cursor->vao);
-    glGenBuffers(1, &cursor->vbo);
+    glGenVertexArrays(1, &ctx->vao);
+    glGenBuffers(1, &ctx->vbo);
     
-    glBindVertexArray(cursor->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, cursor->vbo);
+    glBindVertexArray(ctx->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
 
     f32 vertices[4 * 2] = {
         0.0f, 1.0f,
@@ -265,7 +275,10 @@ void init_render_context(Ted_Context* ctx)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    init_font_render_context(&ctx->arena, ctx->render_ctx, ctx->window_w, ctx->window_h);
+    init_font_render_context(ctx->font_render_ctx, &ctx->arena, ctx->window_w, ctx->window_h);
+    init_cursor_render_context(ctx->cursor_render_ctx, &ctx->arena);
+
+    on_framebuffer_resize(ctx->cursor_render_ctx, ctx->window_w, ctx->window_h);
 }
 
 void bake_font(Ted_Context* ctx, u32 start_charcode, u32 end_charcode, s16 min_font_size, s16 max_font_size, s16 font_size_stride)
@@ -274,14 +287,14 @@ void bake_font(Ted_Context* ctx, u32 start_charcode, u32 end_charcode, s16 min_f
     for (s16 font_size = min_font_size; font_size <= max_font_size; font_size += font_size_stride, ++i)
     {
         if (i >= TED_MAX_ATLASES) break;
-        bake_font_atlas(&ctx->arena, ctx->font, ctx->atlases + i, start_charcode, end_charcode, font_size);
+        bake_font_atlas(ctx->atlases + i, &ctx->arena, ctx->font, start_charcode, end_charcode, font_size);
     }
 
     ctx->atlas_count = i;
     ctx->active_atlas_idx = i / 2;
 
 #if TED_DEBUG
-    bake_font_atlas(&ctx->arena, ctx->font, ctx->debug_atlas, 0, 127, 16);
+    bake_font_atlas(ctx->debug_atlas, &ctx->arena, ctx->font, 0, 127, 16);
 #endif
 }
 
@@ -300,7 +313,6 @@ s16 create_buffer(Ted_Context* ctx)
         
     // @Cleanup: pass arena or smth.
     init_gap_buffer(&buffer->display_buffer, 128);
-    init_cursor(&buffer->arena, &buffer->cursor);
 
     return ctx->buffer_count++;
 }
@@ -543,13 +555,13 @@ static void render(Ted_Context* ctx)
     auto* buffer = active_buffer(ctx);
     const auto* atlas = active_atlas(ctx);
 
-    glUseProgram(ctx->render_ctx->program);
-    glBindVertexArray(ctx->render_ctx->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, ctx->render_ctx->vbo);
+    glUseProgram(ctx->font_render_ctx->program);
+    glBindVertexArray(ctx->font_render_ctx->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->font_render_ctx->vbo);
     glBindTexture(GL_TEXTURE_2D_ARRAY, atlas->texture_array);
     
     glActiveTexture(GL_TEXTURE0);
-    glUniform3f(glGetUniformLocation(ctx->render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
+    glUniform3f(glGetUniformLocation(ctx->font_render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
     
     const s32 buffer_data_size = data_size(&buffer->display_buffer);
     const s32 prefix_size = prefix_data_size(&buffer->display_buffer);
@@ -603,23 +615,23 @@ static void render(Ted_Context* ctx)
         const f32 gx = (f32)(x + metric->offset_x);
         const f32 gy = y - (gh + metric->offset_y);
         
-        mat4* transform = ctx->render_ctx->transforms + work_idx;
+        mat4* transform = ctx->font_render_ctx->transforms + work_idx;
         identity(transform);
         translate(transform, vec3{gx, gy, 0.0f});
         scale(transform, vec3{gw, gh, 0.0f});
 
-        ctx->render_ctx->charmap[work_idx] = ci;
+        ctx->font_render_ctx->charmap[work_idx] = ci;
 
         if (++work_idx >= FONT_RENDER_BATCH_SIZE)
         {
-            render_batch_glyphs(ctx->render_ctx, work_idx);
+            render_batch_glyphs(ctx->font_render_ctx, work_idx);
             work_idx = 0;
         }
 
         x += metric->advance_width;
     }
     
-    if (work_idx > 0) render_batch_glyphs(ctx->render_ctx, work_idx);
+    if (work_idx > 0) render_batch_glyphs(ctx->font_render_ctx, work_idx);
     
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -632,12 +644,33 @@ static s32 vert_offset_from_baseline(const Font* font, const Font_Atlas* atlas)
     return (s32)((font->ascent + font->line_gap) * atlas->px_h_scale);
 }
 
+static s32 line_width_px_till_pointer(const Font_Atlas* atlas, const Gap_Buffer* buffer, s32 start_pos)
+{
+    s32 width = 0;
+    const s32 end_pos = pointer_pos(buffer);
+    for (s32 i = start_pos; i < end_pos; ++i)
+    {
+        const char c = char_at(buffer, i);
+        if (c != INVALID_CHAR)
+        {
+            const u32 ci = c - atlas->start_charcode; // correctly shifted index
+            const Font_Glyph_Metric* metric = atlas->metrics + ci;
+            width += metric->advance_width;
+        }
+    }
+    return width;
+}
+
 static s32 line_width_px(Font_Atlas* atlas, const char* str, s32 size)
 {
+    s32 width = 0;
     for (s32 i = 0; i < size; ++i)
     {
-        // @Todo
+        const u32 ci = str[i] - atlas->start_charcode; // correctly shifted index
+        const Font_Glyph_Metric* metric = atlas->metrics + ci;
+        width += metric->advance_width;
     }
+    return width;
 }
 
 void update_frame(Ted_Context* ctx)
@@ -663,27 +696,36 @@ void update_frame(Ted_Context* ctx)
 
     render(ctx);
 
-    /*
     // Render simple cursor.
     const auto* cursor = &buffer->cursor;
-    const f32 cursor_x = cursor->col * atlas->font_size;
-    const f32 cursor_y = cursor->row * atlas->line_height;
+
+    s32 start_pos = 0;
+    for (s32 i = 0; i < cursor->row; ++i)
+    {
+        start_pos += buffer->line_lengths[i] + 1;
+    }
+    
+    const s32 width_px = line_width_px_till_pointer(atlas, display_buffer, start_pos);
+    
+    const f32 cursor_x = width_px + 4.0f;
+    const f32 cursor_y = (ctx->window_h - atlas->line_height) - cursor->row * atlas->line_height;
 
     identity(&buffer->cursor.transform);
     translate(&buffer->cursor.transform, vec3{cursor_x, cursor_y, 0.0f});
-    scale(&buffer->cursor.transform, vec3{1.0f, 1.0f, 0.0f});
+    scale(&buffer->cursor.transform, vec3{2.0f, (f32)atlas->line_height, 0.0f});
 
-    glUseProgram(buffer->cursor.program);
-    glBindVertexArray(buffer->cursor.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, buffer->cursor.vbo);
+    glUseProgram(ctx->cursor_render_ctx->program);
+    glBindVertexArray(ctx->cursor_render_ctx->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->cursor_render_ctx->vbo);
 
-    glUniformMatrix4fv(glGetUniformLocation(buffer->cursor.program, "u_transform"), count, GL_FALSE, (f32*)buffer->cursor.transform);
+    glUniform3f(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
+    glUniformMatrix4fv(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_transform"), 1, GL_FALSE, (f32*)&buffer->cursor.transform);
+    
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     glUseProgram(0);
-    */
     
 #if TED_DEBUG
     static char debug_str[512];
@@ -693,7 +735,7 @@ void update_frame(Ted_Context* ctx)
     // @Cleanup: using line gap for x positioning is not the best idea.
     f32 x = ctx->window_w - ctx->debug_atlas->line_height * debug_str_size * 0.5f;
     f32 y = (f32)(ctx->window_h - ctx->debug_atlas->line_height);
-    render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
+    render_text(ctx->font_render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
     debug_str_size = sprintf(debug_str, "pointer_pos=%d\ncursor=(%d, %d | %c)\nend=%d\ngap_start=%d\ngap_end=%d\nxy=(%d, %d)\nmin_xy=(%d, %d)\nmax_xy=(%d, %d)\nlast_line_idx=%d\nfont_size=%d",
                              pointer_pos(&buffer->display_buffer),
@@ -705,7 +747,7 @@ void update_frame(Ted_Context* ctx)
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
     y -= ctx->debug_atlas->line_height;
-    render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
+    render_text(ctx->font_render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
 
     x = ctx->window_w - ctx->debug_atlas->font_size * 12.0f;
     y = ctx->window_h * 0.5f;
@@ -714,7 +756,7 @@ void update_frame(Ted_Context* ctx)
     {
         y -= ctx->debug_atlas->line_height;
         debug_str_size = sprintf(debug_str, "line_length[%d]=%d", i, buffer->line_lengths[i]);
-        render_text(ctx->render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
+        render_text(ctx->font_render_ctx, ctx->debug_atlas, debug_str, debug_str_size, 1.0f, x, y, 1.0f, 1.0f, 1.0f);
     }
 #endif
     

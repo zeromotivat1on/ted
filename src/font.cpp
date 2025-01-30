@@ -11,7 +11,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <vendor/stb_truetype.h>
 
-void init_font(Arena* arena, Font* font, const char* path)
+void init_font(Font* font, Arena* arena, const char* path)
 {    
     s32 data_size = 0;
     u8* data = read_entire_file(arena, path, &data_size);
@@ -22,7 +22,7 @@ void init_font(Arena* arena, Font* font, const char* path)
     stbtt_GetFontVMetrics(font->info, &font->ascent, &font->descent, &font->line_gap);
 }
 
-void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w, s32 win_h)
+void init_font_render_context(Font_Render_Context* ctx, Arena* arena, s32 win_w, s32 win_h)
 {
     ctx->program = gl_load_program(arena, DIR_SHADERS "text_batch_2d.vs", DIR_SHADERS "text_batch_2d.fs");
     on_framebuffer_resize(ctx, win_w, win_h);
@@ -51,7 +51,7 @@ void init_font_render_context(Arena* arena, Font_Render_Context* ctx, s32 win_w,
     glBindVertexArray(0);
 }
 
-void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 start_charcode, u32 end_charcode, s16 font_size)
+void bake_font_atlas(Font_Atlas* atlas, Arena* arena, const Font* font, u32 start_charcode, u32 end_charcode, s16 font_size)
 {
     const u32 charcode_count = end_charcode - start_charcode + 1;
     atlas->metrics = push_array(arena, charcode_count, Font_Glyph_Metric);
@@ -60,10 +60,10 @@ void bake_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, u32 star
     atlas->font_size = font_size;
     
     glGenTextures(1, &atlas->texture_array);
-    rescale_font_atlas(arena, font, atlas, font_size);
+    rescale_font_atlas(atlas, arena, font, font_size);
 }
 
-void rescale_font_atlas(Arena* arena, const Font* font, Font_Atlas* atlas, s16 font_size)
+void rescale_font_atlas(Font_Atlas* atlas, Arena* arena, const Font* font, s16 font_size)
 {
     atlas->font_size = font_size;
 

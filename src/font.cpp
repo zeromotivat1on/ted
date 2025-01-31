@@ -25,7 +25,6 @@ void init_font(Font* font, Arena* arena, const char* path)
 void init_font_render_context(Font_Render_Context* ctx, Arena* arena, s32 win_w, s32 win_h)
 {
     ctx->program = gl_load_program(arena, DIR_SHADERS "text_batch_2d.vs", DIR_SHADERS "text_batch_2d.fs");
-    on_framebuffer_resize(ctx, win_w, win_h);
 
     ctx->charmap = push_array(arena, FONT_RENDER_BATCH_SIZE, u32);
     ctx->transforms = push_array(arena, FONT_RENDER_BATCH_SIZE, mat4);
@@ -204,13 +203,5 @@ void render_text(const Font_Render_Context* ctx, const Font_Atlas* atlas, const 
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
-    glUseProgram(0);
-}
-
-void on_framebuffer_resize(const Font_Render_Context* ctx, s32 w, s32 h)
-{
-    glUseProgram(ctx->program);
-    const mat4 projection = mat4_ortho(0.0f, (f32)w, 0.0f, (f32)h, -1.0f, 1.0f);
-    glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_projection"), 1, GL_FALSE, (f32*)&projection);
     glUseProgram(0);
 }

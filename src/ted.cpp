@@ -9,20 +9,21 @@
 #include "arena.h"
 #include "matrix.h"
 #include "profile.h"
+#include "settings.h"
 
-void on_framebuffer_resize(const Ted_Cursor_Render_Context* ctx, s32 w, s32 h)
+static void on_framebuffer_resize(u32 program, s32 w, s32 h)
 {
-    glUseProgram(ctx->program);
+    glUseProgram(program);
     const mat4 projection = mat4_ortho(0.0f, (f32)w, 0.0f, (f32)h, -1.0f, 1.0f);
-    glUniformMatrix4fv(glGetUniformLocation(ctx->program, "u_projection"), 1, GL_FALSE, (f32*)&projection);
+    glUniformMatrix4fv(glGetUniformLocation(program, "u_projection"), 1, GL_FALSE, (f32*)&projection);
     glUseProgram(0);
 }
 
 static void framebuffer_size_callback(GLFWwindow* window, s32 width, s32 height)
 {
     auto* ctx = (Ted_Context*)glfwGetWindowUserPointer(window);
-    on_framebuffer_resize(ctx->font_render_ctx, width, height);
-    on_framebuffer_resize(ctx->cursor_render_ctx, width, height);
+    on_framebuffer_resize(ctx->font_render_ctx->program, width, height);
+    on_framebuffer_resize(ctx->cursor_render_ctx->program, width, height);
     glViewport(0, 0, width, height);
 }
 
@@ -68,6 +69,10 @@ static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, 
         if (action == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
         break;
 
+    case GLFW_KEY_TAB:
+        if (action == GLFW_PRESS) push_str(ctx, buffer_idx, tab_as_space_string(), ted_settings.tab_size);
+        break;
+        
     case GLFW_KEY_S:
         if (action == GLFW_PRESS && mods & GLFW_MOD_CONTROL)
             overwrite_file(&ctx->arena, buffer);
@@ -288,7 +293,8 @@ void init_render_context(Ted_Context* ctx)
     init_font_render_context(ctx->font_render_ctx, &ctx->arena, ctx->window_w, ctx->window_h);
     init_cursor_render_context(ctx->cursor_render_ctx, &ctx->arena);
 
-    on_framebuffer_resize(ctx->cursor_render_ctx, ctx->window_w, ctx->window_h);
+    on_framebuffer_resize(ctx->font_render_ctx->program, ctx->window_w, ctx->window_h);
+    on_framebuffer_resize(ctx->cursor_render_ctx->program, ctx->window_w, ctx->window_h);
 }
 
 void bake_font(Ted_Context* ctx, u32 start_charcode, u32 end_charcode, s16 min_font_size, s16 max_font_size, s16 font_size_stride)
@@ -692,7 +698,7 @@ static void render_buffer(Ted_Context* ctx, s16 buffer_idx)
     const s32 width_px = line_width_px_till_pointer(atlas, display_buffer, line_start_pos);
     
     const f32 cursor_x = width_px + 4.0f;
-    const f32 cursor_y = (ctx->window_h - atlas->line_height) - cursor->row * atlas->line_height;
+    const f32 cursor_y = (f32)(ctx->window_h - atlas->line_height) - cursor->row * atlas->line_height;
 
     identity(&buffer->cursor.transform);
     translate(&buffer->cursor.transform, vec3{cursor_x, cursor_y, 0.0f});

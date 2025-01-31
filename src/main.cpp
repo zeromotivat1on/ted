@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "ted.h"
 #include "memory.h"
-#include "gap_buffer.h"
+#include "settings.h"
 
 int main()
 {
@@ -11,6 +11,8 @@ int main()
     constexpr u32 heap_size = MB(16);
     void* heap = vm_commit(vm_core, heap_size);
 
+    ted_settings.tab_size = 4;
+    
     Ted_Context ted;
     init_ted_context(&ted, heap, heap_size);
     create_window(&ted, 800, 600, 4, 32);

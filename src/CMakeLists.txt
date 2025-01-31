@@ -1,6 +1,6 @@
 add_executable(${PROJECT_NAME}
-                arena.h file.h font.h gap_buffer.h gl.h matrix.h memory.h profile.h ted.h vector.h
-                main.cpp file.cpp font.cpp gap_buffer.cpp gl.cpp matrix.cpp memory.cpp ted.cpp vector.cpp)
+                arena.h file.h font.h gap_buffer.h gl.h matrix.h memory.h profile.h settings.h ted.h vector.h
+                main.cpp file.cpp font.cpp gap_buffer.cpp gl.cpp matrix.cpp memory.cpp settings.cpp ted.cpp vector.cpp)
 
 target_precompile_headers(${PROJECT_NAME} PUBLIC pch.h)
 target_include_directories(${PROJECT_NAME} PRIVATE "${PROJECT_SOURCE_DIR}")

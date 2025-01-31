@@ -1,4 +1,5 @@
 | Ted
+- Cursor as rectangle
 - Mouse click
 - Clipboard copy/paste
 - Region selection/cut/paste etc

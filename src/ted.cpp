@@ -1,15 +1,16 @@
 #include "pch.h"
+#include "ted.h"
+#include "gl.h"
+#include "file.h"
+#include "font.h"
+#include "arena.h"
+#include "matrix.h"
+#include "settings.h"
 #include <math.h>
 #include <stdio.h>
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
-#include "ted.h"
-#include "gl.h"
-#include "font.h"
-#include "arena.h"
-#include "matrix.h"
 #include "profile.h"
-#include "settings.h"
 
 static void on_framebuffer_resize(u32 program, s32 w, s32 h)
 {
@@ -276,6 +277,9 @@ static void init_cursor_render_context(Ted_Cursor_Render_Context* ctx, Arena* ar
 {
     ctx->program = gl_load_program(arena, DIR_SHADERS "cursor.vs", DIR_SHADERS "cursor.fs");
 
+    ctx->u_transform = glGetUniformLocation(ctx->program, "u_transform");
+    ctx->u_text_color = glGetUniformLocation(ctx->program, "u_text_color");
+    
     glGenVertexArrays(1, &ctx->vao);
     glGenBuffers(1, &ctx->vbo);
     
@@ -614,8 +618,8 @@ static s32 line_start_pointer_pos(const Ted_Buffer* buffer)
 
 static void render_batch_glyphs(Font_Render_Context* render_ctx, s32 count)
 {
-    glUniformMatrix4fv(glGetUniformLocation(render_ctx->program, "u_transforms"), count, GL_FALSE, (f32*)render_ctx->transforms);
-    glUniform1uiv(glGetUniformLocation(render_ctx->program, "u_charmap"), count, render_ctx->charmap);
+    glUniformMatrix4fv(render_ctx->u_transforms, count, GL_FALSE, (f32*)render_ctx->transforms);
+    glUniform1uiv(render_ctx->u_charmap, count, render_ctx->charmap);
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, count);
 }
 
@@ -634,7 +638,7 @@ static void render_buffer(Ted_Context* ctx, s16 buffer_idx)
     glBindTexture(GL_TEXTURE_2D_ARRAY, atlas->texture_array);
     
     glActiveTexture(GL_TEXTURE0);
-    glUniform3f(glGetUniformLocation(ctx->font_render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
+    glUniform3f(ctx->font_render_ctx->u_text_color, ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
     
     const s32 buffer_data_size = data_size(&buffer->display_buffer);
     const s32 prefix_size = prefix_data_size(&buffer->display_buffer);
@@ -728,8 +732,8 @@ static void render_buffer(Ted_Context* ctx, s16 buffer_idx)
     glBindVertexArray(ctx->cursor_render_ctx->vao);
     glBindBuffer(GL_ARRAY_BUFFER, ctx->cursor_render_ctx->vbo);
 
-    glUniform3f(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_text_color"), ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
-    glUniformMatrix4fv(glGetUniformLocation(ctx->cursor_render_ctx->program, "u_transform"), 1, GL_FALSE, (f32*)&buffer->cursor.transform);
+    glUniform3f(ctx->cursor_render_ctx->u_text_color, ctx->text_color.r, ctx->text_color.g, ctx->text_color.b);
+    glUniformMatrix4fv(ctx->cursor_render_ctx->u_transform, 1, GL_FALSE, (f32*)&buffer->cursor.transform);
     
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 

@@ -19,29 +19,32 @@ struct Font
 
 struct Font_Glyph_Metric
 {
-    s32 offset_x; // bitmap coords
-    s32 offset_y; // bitmap coords
+    s32 offset_x;
+    s32 offset_y;
     s32 advance_width; // already scaled
 };
 
 struct Font_Atlas
 {
     Font_Glyph_Metric* metrics;
-    u32 texture_array; // glyph bitmaps array
+    u32 texture_array;
     u32 start_charcode;
     u32 end_charcode;
-    f32 px_h_scale; // glyph pixel height scale
+    f32 px_h_scale;
     s32 line_height;
-    s16 font_size; // also treated as size of each square glyph bitmap
+    s16 font_size; // size of glyph square bitmap
 };
 
 struct Font_Render_Context
 {
-    u32 program; // glyph render pipeline
-    u32 vao; // glyph quad vertices data
-    u32 vbo; // glyph quad vertices data
-    u32* charmap; // uniform array for batch rendering
-    mat4* transforms; // uniform array for batch rendering
+    u32 program;
+    u32 vao;
+    u32 vbo;
+    u32 u_charmap;
+    u32 u_transforms;
+    u32 u_text_color;
+    u32* charmap;
+    mat4* transforms;
 };
 
 void init_font(Font* font, Arena* arena, const char* path);

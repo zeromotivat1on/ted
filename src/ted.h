@@ -1,6 +1,5 @@
 #pragma once
 
-#include "file.h"
 #include "arena.h"
 #include "vector.h"
 #include "matrix.h"
@@ -21,7 +20,6 @@ inline constexpr s32 TED_MAX_FILE_SIZE = KB(256);
 inline constexpr s32 TED_MAX_FILE_NAME_SIZE = 256;
 inline constexpr s32 TED_MAX_BUFFER_SIZE = TED_MAX_FILE_NAME_SIZE + TED_MAX_FILE_SIZE + (TED_MAX_LINE_COUNT * sizeof(s32));
 
-// @Wip
 struct Ted_Cursor
 {
     s32 row;
@@ -34,6 +32,8 @@ struct Ted_Cursor_Render_Context
     u32 program;
     u32 vao;
     u32 vbo;
+    u32 u_transform;
+    u32 u_text_color;
 };
 
 struct Ted_Buffer

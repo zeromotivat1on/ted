@@ -26,6 +26,10 @@ void init_font_render_context(Font_Render_Context* ctx, Arena* arena, s32 win_w,
 {
     ctx->program = gl_load_program(arena, DIR_SHADERS "text_batch_2d.vs", DIR_SHADERS "text_batch_2d.fs");
 
+    ctx->u_charmap = glGetUniformLocation(ctx->program, "u_charmap");
+    ctx->u_transforms = glGetUniformLocation(ctx->program, "u_transforms");
+    ctx->u_text_color = glGetUniformLocation(ctx->program, "u_text_color");
+        
     ctx->charmap = push_array(arena, FONT_RENDER_BATCH_SIZE, u32);
     ctx->transforms = push_array(arena, FONT_RENDER_BATCH_SIZE, mat4);
     

@@ -1,4 +1,5 @@
 | Ted
+- Better buffer memory management, not necessarily through arenas
 - Cursor as rectangle
 - Mouse click
 - Clipboard copy/paste
@@ -7,7 +8,7 @@
 - Change uniform arrays to uniform buffer objects
 
 | Framework
-- Make gap buffer use memory arena
+- Make gap buffer use memory arena?
 
 | Font
 - Handle on/off curve points, hence bezier curves come up

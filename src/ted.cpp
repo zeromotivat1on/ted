@@ -718,7 +718,7 @@ static void render_buffer(Ted_Context* ctx, s16 buffer_idx)
     const s32 width_px = line_width_px_till_pointer(atlas, display_buffer, line_start_pos);
     
     const f32 cursor_x = width_px + 4.0f;
-    const f32 cursor_y = (f32)(ctx->window_h - atlas->line_height) - cursor->row * atlas->line_height;
+    const f32 cursor_y = (f32)(buffer->y + ctx->font->descent * atlas->px_h_scale) - cursor->row * atlas->line_height;
 
     identity(&buffer->cursor.transform);
     translate(&buffer->cursor.transform, vec3{cursor_x, cursor_y, 0.0f});

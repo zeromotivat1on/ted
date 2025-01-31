@@ -72,6 +72,26 @@ static void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, 
     case GLFW_KEY_TAB:
         if (action == GLFW_PRESS) push_str(ctx, buffer_idx, tab_as_space_string(), ted_settings.tab_size);
         break;
+
+    case GLFW_KEY_HOME:
+        if (action == GLFW_PRESS)
+        {
+            if (mods & GLFW_MOD_CONTROL) set_cursor(ctx, buffer_idx, 0, 0);
+            else set_cursor(ctx, buffer_idx, buffer->cursor.row, 0);
+        }
+        
+        break;
+
+    case GLFW_KEY_END:
+        if (action == GLFW_PRESS)
+        {
+            if (mods & GLFW_MOD_CONTROL)
+                set_cursor(ctx, buffer_idx, buffer->last_line_idx, buffer->line_lengths[buffer->last_line_idx]);    
+            else
+                set_cursor(ctx, buffer_idx, buffer->cursor.row, buffer->line_lengths[buffer->cursor.row]);
+        }
+        
+        break;
         
     case GLFW_KEY_S:
         if (action == GLFW_PRESS && mods & GLFW_MOD_CONTROL)

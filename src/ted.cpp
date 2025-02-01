@@ -170,19 +170,36 @@ static void scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset)
     }
 }
 
+static s32 find_buffer_by_file(const Ted_Context* ctx, const char* path)
+{
+    for (s32 i = 0; i < ctx->buffer_count; ++i)
+        if (strcmp((ctx->buffers + i)->path, path) == 0) return i;
+    return INVALID_INDEX;
+}
+
 static void drop_callback(GLFWwindow* window, s32 count, const char** paths)
 {
     SCOPE_TIMER(__FUNCTION__);
     
     auto* ctx = (Ted_Context*)glfwGetWindowUserPointer(window);
     s16 buffer_idx = 0;
+    
     for (s32 i = 0; i < count; ++i)
     {
-         // @Cleanup: maybe its a bit annoying to write such procedure every time
-         // you want to open a new file and we should tweak api to have just one
-         // function that opens file in new buffer.
-         buffer_idx = create_buffer(ctx);
-         load_file_contents(ctx, buffer_idx, paths[i]);
+        const s32 idx = find_buffer_by_file(ctx, paths[i]);
+        if (idx == INVALID_INDEX)
+        {
+            buffer_idx = create_buffer(ctx);
+            load_file_contents(ctx, buffer_idx, paths[i]);
+        }
+        else
+        {
+            buffer_idx = idx;
+
+            // @Todo: make a better solution like show prompt with options to whether
+            // reload file contents into buffer or ignore dropped file.
+            printf("Buffer (%s) is already opened\n", paths[i]);
+        }
     }
 
     set_active_buffer(ctx, buffer_idx);
@@ -340,7 +357,7 @@ void bake_font(Ted_Context* ctx, u32 start_charcode, u32 end_charcode, s16 min_f
 
 s16 create_buffer(Ted_Context* ctx)
 {
-    if (ctx->buffer_count > TED_MAX_BUFFERS) return -1;
+    if (ctx->buffer_count > TED_MAX_BUFFERS) return INVALID_INDEX;
 
     auto* atlas = active_atlas(ctx);
     auto* buffer = ctx->buffers + ctx->buffer_count;

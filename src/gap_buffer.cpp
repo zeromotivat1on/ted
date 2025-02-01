@@ -39,7 +39,8 @@ s32 suffix_data_size(const Gap_Buffer* buffer)
 
 char char_at(const Gap_Buffer* buffer, s32 pos)
 {
-    if (pos == data_size(buffer)) return INVALID_CHAR; // nochekin
+    // @Cleanup: can we get rid of this?
+    if (pos == data_size(buffer)) return INVALID_CHAR;
     
     assert(pos >= 0);
     assert(pos < data_size(buffer));

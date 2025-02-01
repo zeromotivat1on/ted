@@ -27,3 +27,5 @@ using f64 = double;
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define clamp(x, a, b) (min((b), max((a), (x))))
+
+#define INVALID_INDEX -1

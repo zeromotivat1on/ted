@@ -1,9 +1,6 @@
 #pragma once
 
-// @Cleanup: use memory arenas, malloc is used as temp solution.
-// @Cleanup: delete char functions return deleted character,
-// but due to this change, they became less safely and require
-// checks before the call, maybe add invalid return character (like 0)?
+// @Cleanup: use memory arenas, malloc is used as temp solution. ???
 
 inline constexpr char INVALID_CHAR = 0;
 inline constexpr s32 GAP_EXPAND_SIZE = 16;
